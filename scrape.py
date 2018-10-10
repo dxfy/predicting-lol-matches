@@ -93,4 +93,10 @@ def scrape_tournament_history(url, tournament):
     text_file.write(str(history))
     text_file.close()
 
-scrape_tournament_history("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
+def scrape_match(url):
+    match_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + url[61:-13]).json()
+    timeline_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + url[61:-39] + "/timeline" + url[82:-13]).json()
+
+#scrape_tournament_history("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
+
+scrape_match("https://matchhistory.na.leagueoflegends.com/en/#match-details/ESPORTSTMNT02/800982?gameHash=ad8c47cfdf6a0b9a&tab=overview")
