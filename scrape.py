@@ -17,17 +17,13 @@ def scrape_tournament_history(url, tournament):
 
     # Removes table and column header rows
     rows = history.find_all('tr')
-    for x in range(0, 3):
-        rows[x].extract()
+    rows[0].decompose()
+    rows[1].decompose()
+    rows[len(rows)-1].decompose()
 
-    # Removes images and unnecessary columns
-    [x.decompose() for x in history.find_all('img')]
+    # Removes unnecessary columns
     [x.decompose() for x in history.find_all('td', {'class': 'stats'})]
     rows = history.find_all('tr')
-    for x in range(0, len(rows)):
-        columns = rows[x].find_all('td')
-        columns[12].extract()
-        columns[10].extract()
 
     # Order from least to most recent
     rows.reverse()
@@ -49,26 +45,16 @@ def scrape_tournament_history(url, tournament):
                 game = matches[len(matches)-1]['game'] + 1
 
         # get bans
-        blue_bans_tags = columns[4].span.find_all('a')
-        red_bans_tags = columns[5].span.find_all('a')
-        blue_bans = []
-        red_bans = []
-        for y in range(0, len(blue_bans_tags)):
-            blue_bans.insert(len(blue_bans), blue_bans_tags[y].get('title').strip())
-            red_bans.insert(len(red_bans), red_bans_tags[y].get('title').strip())
+        blue_bans = columns[5].contents[0].replace("\n", "").split(", ")
+        red_bans = columns[6].contents[0].replace("\n", "").split(", ")
 
         # get picks
-        blue_picks_tags = columns[6].span.find_all('a')
-        red_picks_tags = columns[7].span.find_all('a')
-        blue_picks = []
-        red_picks = []
-        for y in range(0, len(blue_picks_tags)):
-            blue_picks.insert(len(blue_picks), blue_picks_tags[y].get('title').strip())
-            red_picks.insert(len(red_picks), red_picks_tags[y].get('title').strip())
+        blue_picks = columns[7].contents[0].replace("\n", "").split(", ")
+        red_picks = columns[8].contents[0].replace("\n", "").split(", ")
 
         # get players
-        blue_players_tags = columns[8].span.find_all('a')
-        red_players_tags = columns[9].span.find_all('a')
+        blue_players_tags = columns[9].find_all('a')
+        red_players_tags = columns[10].find_all('a')
         blue_players = []
         red_players = []
         for y in range(0, len(blue_players_tags)):
@@ -88,7 +74,7 @@ def scrape_tournament_history(url, tournament):
             'red_picks': red_picks,
             'blue_players': blue_players,
             'red_players': red_players,
-            'url': "Riot Match History Page could not be found." if columns[10].find('a') is None else columns[10].find('a').get('href').strip()
+            'url': "Riot Match History Page could not be found." if columns[12].find('a') is None else columns[12].find('a').get('href').strip()
         }
 
         matches.insert(len(matches), data)
@@ -107,4 +93,4 @@ def scrape_tournament_history(url, tournament):
     text_file.write(str(history))
     text_file.close()
 
-scrape_tournament_history("https://lol.gamepedia.com/League_Championship_Series/North_America/2018_Season/Regional_Finals/Match_History", "NALCS Regionals 2018")
+scrape_tournament_history("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
