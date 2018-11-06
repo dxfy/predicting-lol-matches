@@ -8,36 +8,31 @@ import csv
 import time
 from collections import OrderedDict
 
-def load_page(url):
+# Takes a lol.gamepedia.com tournament match history page and returns match history url and team/player information.
+def get_tournament_matches(url, tournament):
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
 
-    return soup
-
-def scrape_tournament_history(url, tournament):
-    soup = load_page(url)
-
     history = soup.find('table', {'class': 'wikitable'})
 
-    # Removes table and column header rows
+    # Removes table and column header rows.
     rows = history.find_all('tr')
     rows[0].decompose()
     rows[1].decompose()
     rows[len(rows)-1].decompose()
-
-    # Removes unnecessary columns
+    # Removes unnecessary columns.
     [x.decompose() for x in history.find_all('td', {'class': 'stats'})]
     rows = history.find_all('tr')
 
-    # Order from least to most recent
+    # Order from least to most recent.
     rows.reverse()
 
-    # Scrapes data and stores match data in array
+    # Scrapes data and stores match data in array.
     matches = []
     for x in range(0, len(rows)):
         columns = rows[x].find_all('td')
 
-        # gets game number if in a series
+        # Gets game number if in a series.
         game = 1
         if len(matches) > 0:
             prev_blue = matches[len(matches)-1]['blue_team']
@@ -48,30 +43,32 @@ def scrape_tournament_history(url, tournament):
             if (prev_blue in (curr_red, curr_blue)) and (prev_red in (curr_red, curr_blue)):
                 game = matches[len(matches)-1]['game'] + 1
 
-        # get players
+        # Gets players.
         blue_players_tags = columns[9].find_all('a')
         red_players_tags = columns[10].find_all('a')
         blue_players = []
         red_players = []
         for y in range(0, len(blue_players_tags)):
-            blue_players.insert(len(blue_players), blue_players_tags[y].contents[0].strip())
-            red_players.insert(len(red_players), red_players_tags[y].contents[0].strip())
+            blue_players.append(blue_players_tags[y].contents[0].strip())
+            red_players.append(red_players_tags[y].contents[0].strip())
 
-        data = OrderedDict()
-        data['date'] = columns[0].get_text().strip()
-        data['tournament'] = tournament
-        data['game'] = game
-        data['blue_team'] = columns[2].find('a').get('title').strip()
-        data['red_team'] = columns[3].find('a').get('title').strip()
-        data['blue_players'] = blue_players
-        data['red_players'] = red_players
-        data['url'] = "Riot Match History Page could not be found." if columns[12].find('a') is None else columns[12].find('a').get('href').strip()
+        match = OrderedDict()
+        match['date'] = columns[0].get_text().strip()
+        match['tournament'] = tournament
+        match['game'] = game
+        match['blue_team'] = columns[2].find('a').get('title').strip()
+        match['red_team'] = columns[3].find('a').get('title').strip()
+        match['blue_players'] = blue_players
+        match['red_players'] = red_players
+        match['url'] = columns[12].find('a').get('href').strip() if columns[12].find('a') is not None else "Riot Match History Page could not be found."
 
-        matches.insert(len(matches), data)
+        matches.append(match)
 
     return matches
 
-def scrape_matches(matches):
+# Iterates over matches returned from get_tournament_matches and uses riot api to return match data for each match.
+def get_matches_data(matches):
+    matches_data = []
     for match in matches:
         if match['url'] == "Riot Match History Page could not be found.":
             continue
@@ -88,13 +85,13 @@ def scrape_matches(matches):
         for player in range(0, 10):
             data = OrderedDict()
 
-            ## general details
+            ## Game Details
             # url
             data['url'] = match['url']
             # game id
             data['game_id'] = match_data['gameId']
             # date
-            data['date'] = time.strftime('%d/%m/%Y',  time.localtime(match_data['gameCreation']/float(1000)))
+            data['date'] = time.strftime('%d/%m/%Y', time.localtime(match_data['gameCreation']/float(1000)))
             # patch
             data['patch'] = match_data['gameVersion']
             # tournament
@@ -102,33 +99,18 @@ def scrape_matches(matches):
             # game in series
             data['game_in_series'] = match['game']
 
-            ## player details
+            ## Player Details
             # player id
             data['player_id'] = match_data['participants'][player]['participantId']
             # side
-            if match_data['participants'][player]['teamId'] == 100:
-                data['side'] = "blue"
-            else:
-                data['side'] = "red"
+            data['side'] = "blue" if match_data['participants'][player]['teamId'] == 100 else "red"
             # team
-            if player < 5:
-                data['team'] = match['blue_team']
-            else:
-                data['team'] = match['red_team']
+            data['team'] = match['blue_team'] if player < 5 else match['red_team']
             # player
             data['player'] = (match['blue_players'] + match['red_players'])[player]
             # position
-            position = player % 5
-            if position == 0:
-                data['position'] = "Top"
-            elif position == 1:
-                data['position'] = "Jungle"
-            elif position == 2:
-                data['position'] = "Mid"
-            elif position == 3:
-                data['position'] = "Adc"
-            elif position == 4:
-                data['position'] = "Support"
+            positions = ["Top", "Jungle", "Mid", "ADC", "Support"]
+            data['position'] = positions[player % 5]
             # champion
 
             ## game details
@@ -136,34 +118,19 @@ def scrape_matches(matches):
             # game length
             data['game_length'] = match_data['gameDuration']/float(60)
             # result
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
-            if match_data['teams'][team]['win'] == "Win":
-                data['result'] = 1
-            else:
-                data['result'] = 0
-
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
+            data['result'] = 1 if match_data['teams'][team]['win'] == "Win" else 0
             ## combat
             # kills death assists
             data['kills'] = match_data['participants'][player]['stats']['kills']
             data['deaths'] = match_data['participants'][player]['stats']['deaths']
             data['assists'] = match_data['participants'][player]['stats']['assists']
             # opponent kills
-            if player < 5:
-                data['opp_kills'] = match_data['participants'][player+5]['stats']['kills']
-            else:
-                data['opp_kills'] = match_data['participants'][player-5]['stats']['kills']
+            data['opp_kills'] = match_data['participants'][player+5]['stats']['kills'] if player < 5 else match_data['participants'][player-5]['stats']['kills']
             # kda
-            if data['deaths'] == 0:
-                data['kda'] = (data['kills'] + data['assists'])
-            else:
-                data['kda'] = (data['kills'] + data['assists'])/float(data['deaths'])
+            data['kda'] = (data['kills'] + data['assists']) if data['deaths'] == 0 else (data['kills'] + data['assists'])/float(data['deaths'])
             # team kills & team deaths
-            team_offset = 0
-            if player >= 5:
-                team_offset = 5
+            team_offset = 5 if player >= 5 else 0
             team_kills = 0
             team_deaths = 0
             for x in range(0+team_offset, 5+team_offset):
@@ -177,14 +144,8 @@ def scrape_matches(matches):
             data['quadra_kills'] = match_data['participants'][player]['stats']['quadraKills']
             data['penta_kills'] = match_data['participants'][player]['stats']['pentaKills']
             # first blood & assist
-            if match_data['participants'][player]['stats']['firstBloodKill']:
-                data['first_blood'] = 1
-            else:
-                data['first_blood'] = 0
-            if match_data['participants'][player]['stats']['firstBloodAssist']:
-                data['first_blood_assist'] = 1
-            else:
-                data['first_blood_assist'] = 0
+            data['first_blood'] = 1 if match_data['participants'][player]['stats']['firstBloodKill'] else 0
+            data['first_blood_assist'] = 1 if match_data['participants'][player]['stats']['firstBloodAssist'] else 0
             # first blood time
             first_blood_time = 0
             for frame in timeline_data['frames']:
@@ -195,19 +156,14 @@ def scrape_matches(matches):
                         first_blood_time = event['timestamp']
                         break
             data['first_blood_time'] = (first_blood_time/float(1000))/float(60)
-            # kills per minute
+            # kills per minute, opponent kills per minute, combined kills per minute
             data['kills_per_minute'] = data['kills']/float(data['game_length'])
-            # opponent kills per minute
             data['opp_kills_per_minute'] = data['opp_kills']/float(data['game_length'])
-            # combined kills per minute
             data['combined_kills_per_minute'] = (data['kills'] + data['opp_kills'])/float(data['game_length'])
 
             ## objectives
             # first tower
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['first_tower'] = int(match_data['teams'][team]['firstTower'])
             # first tower time & lane
             first_tower_time = 0
@@ -228,10 +184,7 @@ def scrape_matches(matches):
                     break
                 for event in frame['events']:
                     if event['type'] == "BUILDING_KILL" and event['laneType'] == "MID_LANE" and event['towerType'] == "OUTER_TURRET":
-                        if event['teamId'] == match_data['participants'][player]['teamId']:
-                            first_mid_outer = 0
-                        else:
-                            first_mid_outer = 1
+                        first_mid_outer = 0 if event['teamId'] == match_data['participants'][player]['teamId'] else 1
                         break
             data['first_mid_outer'] = first_mid_outer
             # first to three towers
@@ -247,25 +200,17 @@ def scrape_matches(matches):
                         else:
                             red_tower_kills += 1
             first_to_three_towers = 0
-            if match_data['participants'][player]['teamId'] == 100:
-                if blue_tower_kills == 3:
-                    first_to_three_towers = 1
-            else:
-                if red_tower_kills == 3:
-                    first_to_three_towers = 1
+            if match_data['participants'][player]['teamId'] == 100 and blue_tower_kills == 3:
+                first_to_three_towers = 1
+            elif red_tower_kills == 3:
+                first_to_three_towers = 1
             data['first_to_three_towers'] = first_to_three_towers
             # team & opponent tower kills
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['team_tower_kills'] = match_data['teams'][team]['towerKills']
             data['opp_tower_kills'] = match_data['teams'][1-team]['towerKills']
             # first dragon
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['first_dragon'] = int(match_data['teams'][team]['firstDragon'])
             # first dragon time
             first_dragon_time = 0
@@ -278,10 +223,7 @@ def scrape_matches(matches):
                         break
             data['first_dragon_time'] = (first_dragon_time/float(1000))/float(60)
             # team & opponent dragons
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['team_dragons'] = match_data['teams'][team]['dragonKills']
             data['opp_dragons'] = match_data['teams'][1-team]['dragonKills']
             # team & opponent elementals
@@ -333,10 +275,7 @@ def scrape_matches(matches):
             data['team_elders'] = team_elders
             data['opp_elders'] = opp_elders
             # first baron
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['first_baron'] = int(match_data['teams'][team]['firstBaron'])
             # first baron time
             first_baron_time = 0
@@ -349,17 +288,11 @@ def scrape_matches(matches):
                         break
             data['first_baron_time'] = (first_baron_time/float(1000))/float(60)
             # team & opponent barons
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['team_barons'] = match_data['teams'][team]['baronKills']
             data['opp_barons'] = match_data['teams'][1-team]['baronKills']
             # herald
-            if match_data['participants'][player]['teamId'] == 100:
-                team = 0
-            else:
-                team = 1
+            team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['herald'] = int(match_data['teams'][team]['firstRiftHerald'])
             # herald time
             herald_time = 0
@@ -374,9 +307,7 @@ def scrape_matches(matches):
 
             ## damage to champions
             # storing total damage values
-            team_offset = 0
-            if player >= 5:
-                team_offset = 5
+            team_offset = 5 if player >= 5 else 0
             team_damage = 0
             team_physical_damage = 0
             team_magic_damage = 0
@@ -404,9 +335,7 @@ def scrape_matches(matches):
             # gold per minute (minus gold generation)
             data['gold_earned_per_minute'] = data['gold_earned']/float(data['game_length'])
             # share of team total gold (minus starting gold and gold generation)
-            team_offset = 0
-            if player >= 5:
-                team_offset = 5
+            team_offset = 5 if player >= 5 else 0
             team_gold_earned = 0
             for x in range(0+team_offset, 5+team_offset):
                 team_gold_earned += match_data['participants'][x]['stats']['goldEarned']
@@ -424,16 +353,12 @@ def scrape_matches(matches):
             data['monster_kills_team_jungle'] = match_data['participants'][player]['stats']['neutralMinionsKilledTeamJungle']
             data['monster_kills_opp_jungle'] = match_data['participants'][player]['stats']['neutralMinionsKilledEnemyJungle']
 
-
-
             ## vision
             # wards placed, wards placed per minute
             data['wards_placed'] = match_data['participants'][player]['stats']['wardsPlaced']
             data['wards_placed_per_minute'] = data['wards_placed']/float(data['game_length'])
             # share of team wards placed
-            team_offset = 0
-            if player >= 5:
-                team_offset = 5
+            team_offset = 5 if player >= 5 else 0
             team_wards_placed = 0
             for x in range(0+team_offset, 5+team_offset):
                 team_wards_placed += match_data['participants'][x]['stats']['wardsPlaced']
@@ -482,16 +407,26 @@ def scrape_matches(matches):
             data['visible_wards_cleared_percent'] = visible_wards_cleared/float(opp_visible_wards_placed)
             data['invisible_wards_cleared_percent'] = invisible_wards_cleared/float(opp_invisible_wards_placed)
 
-            with open('matches.csv', mode='a') as csv_file:
-                writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-                writer.writerow(data)
+            matches_data.append(data)
 
-fieldnames = ['url', 'game_id', 'date', 'patch', 'tournament', 'game_in_series', 'player_id', 'side', 'team', 'player', 'position', 'game_length', 'result', 'kills', 'deaths', 'assists', 'opp_kills', 'kda', 'team_kills', 'team_deaths', 'double_kills', 'triple_kills', 'quadra_kills', 'penta_kills', 'first_blood', 'first_blood_assist', 'first_blood_time', 'kills_per_minute', 'opp_kills_per_minute', 'combined_kills_per_minute', 'first_tower', 'first_tower_time', 'first_tower_lane', 'first_mid_outer', 'first_to_three_towers', 'team_tower_kills', 'opp_tower_kills', 'first_dragon', 'first_dragon_time', 'team_dragons', 'opp_dragons', 'team_elementals', 'opp_elementals', 'fire_dragons', 'water_dragons', 'earth_dragons', 'air_dragons', 'team_elders', 'opp_elders', 'first_baron', 'first_baron_time', 'team_barons', 'opp_barons', 'herald', 'herald_time', 'damage', 'damage_per_minute', 'damage_share_of_team_damage', 'physical_damage', 'physical_damage_share_of_team_physical_damage', 'physical_damage_share_of_damage', 'magic_damage', 'magic_damage_share_of_team_magic_damage', 'magic_damage_share_of_damage', 'gold_earned', 'gold_earned_per_minute', 'gold_earned_share', 'gold_spent', 'creep_score', 'creep_score_per_minute', 'monster_kills', 'monster_kills_team_jungle', 'monster_kills_opp_jungle', 'wards_placed', 'wards_placed_per_minute', 'wards_placed_share', 'wards_cleared', 'wards_cleared_per_minute', 'control_wards_placed', 'control_wards_placed_per_minute', 'visible_wards_cleared_percent', 'invisible_wards_cleared_percent']
+    return matches_data
 
-with open('matches.csv', mode='w') as csv_file:
-    writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-    writer.writeheader()
+def write_matches_data_to_csv(matches):
+    with open('matches.csv', mode='w') as csv_file:
+        fieldnames = []
+        for key in matches[0]:
+            fieldnames.append(key)
 
-matches = scrape_tournament_history("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
 
-scrape_matches(matches)
+    with open('matches.csv', mode='a') as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        for match in matches:
+            writer.writerow(match)
+
+matches = get_tournament_matches("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
+
+matches_data = get_matches_data(matches)
+
+write_matches_data_to_csv(matches_data)
