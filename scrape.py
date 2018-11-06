@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
-# import libraries
 import requests
 from bs4 import BeautifulSoup
 import json
 import csv
+import os
 import time
 from collections import OrderedDict
 
@@ -120,6 +120,7 @@ def get_matches_data(matches):
             # result
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['result'] = 1 if match_data['teams'][team]['win'] == "Win" else 0
+
             ## combat
             # kills death assists
             data['kills'] = match_data['participants'][player]['stats']['kills']
@@ -146,15 +147,19 @@ def get_matches_data(matches):
             # first blood & assist
             data['first_blood'] = 1 if match_data['participants'][player]['stats']['firstBloodKill'] else 0
             data['first_blood_assist'] = 1 if match_data['participants'][player]['stats']['firstBloodAssist'] else 0
-            # first blood time
+            # first blood victim & first blood time
+            first_blood_victim = 0
             first_blood_time = 0
             for frame in timeline_data['frames']:
                 if first_blood_time != 0:
                     break
                 for event in frame['events']:
                     if event['type'] == "CHAMPION_KILL":
+                        if (event['victimId']-1) == player:
+                            first_blood_victim = 1
                         first_blood_time = event['timestamp']
                         break
+            data['first_blood_victim'] = first_blood_victim
             data['first_blood_time'] = (first_blood_time/float(1000))/float(60)
             # kills per minute, opponent kills per minute, combined kills per minute
             data['kills_per_minute'] = data['kills']/float(data['game_length'])
@@ -205,7 +210,7 @@ def get_matches_data(matches):
             elif red_tower_kills == 3:
                 first_to_three_towers = 1
             data['first_to_three_towers'] = first_to_three_towers
-            # team & opponent tower kills
+            # team tower kills & opponent tower kills
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['team_tower_kills'] = match_data['teams'][team]['towerKills']
             data['opp_tower_kills'] = match_data['teams'][1-team]['towerKills']
@@ -222,11 +227,11 @@ def get_matches_data(matches):
                         first_dragon_time = event['timestamp']
                         break
             data['first_dragon_time'] = (first_dragon_time/float(1000))/float(60)
-            # team & opponent dragons
+            # team dragons & opponent dragons
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['team_dragons'] = match_data['teams'][team]['dragonKills']
             data['opp_dragons'] = match_data['teams'][1-team]['dragonKills']
-            # team & opponent elementals
+            # team elementals & opponent elementals
             team_elementals = 0
             opp_elementals = 0
             for frame in timeline_data['frames']:
@@ -261,7 +266,7 @@ def get_matches_data(matches):
             data['water_dragons'] = water_dragons
             data['earth_dragons'] = earth_dragons
             data['air_dragons'] = air_dragons
-            # team & opponent elders
+            # team elders & opponent elders
             team_elders = 0
             opp_elders = 0
             for frame in timeline_data['frames']:
@@ -287,7 +292,7 @@ def get_matches_data(matches):
                         first_baron_time = event['timestamp']
                         break
             data['first_baron_time'] = (first_baron_time/float(1000))/float(60)
-            # team & opponent barons
+            # team barons & opponent barons
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['team_barons'] = match_data['teams'][team]['baronKills']
             data['opp_barons'] = match_data['teams'][1-team]['baronKills']
@@ -331,8 +336,8 @@ def get_matches_data(matches):
 
             ## gold
             # total gold earned (minus starting gold and gold generation)
-            data['gold_earned'] = match_data['participants'][player]['stats']['goldEarned']
-            # gold per minute (minus gold generation)
+            data['gold_earned'] = match_data['participants'][player]['stats']['goldEarned']-(500+(20.4*data['game_length']*60/10))
+            # gold per minute (minus starting gold and gold generation)
             data['gold_earned_per_minute'] = data['gold_earned']/float(data['game_length'])
             # share of team total gold (minus starting gold and gold generation)
             team_offset = 5 if player >= 5 else 0
@@ -366,11 +371,11 @@ def get_matches_data(matches):
             # wards cleared, wards cleared per minute
             data['wards_cleared'] = match_data['participants'][player]['stats']['wardsKilled']
             data['wards_cleared_per_minute'] = data['wards_cleared']/float(data['game_length'])
-            # control wards placed, control wards placed per minute
+            # vision/control wards placed, vision/control wards placed per minute
             control_wards_placed = 0
             for frame in timeline_data['frames']:
                 for event in frame['events']:
-                    if event['type'] == "WARD_PLACED" and event['wardType'] == "CONTROL_WARD":
+                    if event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "VISION_WARD"):
                         if (event['creatorId']-1) == player:
                             control_wards_placed += 1
             data['control_wards_placed'] = control_wards_placed
@@ -382,28 +387,28 @@ def get_matches_data(matches):
             invisible_wards_cleared = 0
             for frame in timeline_data['frames']:
                 for event in frame['events']:
-                    # opponent visible wards cleared/placed
-                    if event['type'] == "WARD_PLACED" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET":
-                        if player < 5 and ((event['creatorId']-1) >= 5):
-                            opp_visible_wards_placed += 1
-                        elif player >= 5 and ((event['creatorId']-1) < 5):
-                            opp_visible_wards_placed += 1
-                    if event['type'] == "WARD_KILL" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET":
-                        if player < 5 and ((event['killerId']-1) >= 5):
-                            visible_wards_cleared += 1
-                        elif player >= 5 and ((event['killerId']-1) < 5):
-                            visible_wards_cleared += 1
                     # opponent invisible wards cleared/placed
-                    if event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET"):
+                    if event['type'] == "WARD_PLACED" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD":
                         if player < 5 and ((event['creatorId']-1) >= 5):
                             opp_invisible_wards_placed += 1
                         elif player >= 5 and ((event['creatorId']-1) < 5):
                             opp_invisible_wards_placed += 1
-                    if event['type'] == "WARD_KILL" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET"):
+                    if event['type'] == "WARD_KILL" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD":
                         if player < 5 and ((event['killerId']-1) >= 5):
                             invisible_wards_cleared += 1
                         elif player >= 5 and ((event['killerId']-1) < 5):
                             invisible_wards_cleared += 1
+                    # opponent visible wards cleared/placed
+                    if event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
+                        if player < 5 and ((event['creatorId']-1) >= 5):
+                            opp_visible_wards_placed += 1
+                        elif player >= 5 and ((event['creatorId']-1) < 5):
+                            opp_visible_wards_placed += 1
+                    if event['type'] == "WARD_KILL" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
+                        if player < 5 and ((event['killerId']-1) >= 5):
+                            visible_wards_cleared += 1
+                        elif player >= 5 and ((event['killerId']-1) < 5):
+                            visible_wards_cleared += 1
             data['visible_wards_cleared_percent'] = visible_wards_cleared/float(opp_visible_wards_placed)
             data['invisible_wards_cleared_percent'] = invisible_wards_cleared/float(opp_invisible_wards_placed)
 
@@ -412,7 +417,12 @@ def get_matches_data(matches):
     return matches_data
 
 def write_matches_data_to_csv(matches):
-    with open('matches.csv', mode='w') as csv_file:
+    file_name = 'matches.csv'
+
+    if os.path.isfile(file_name):
+        os.remove(file_name)
+
+    with open(file_name, mode='w') as csv_file:
         fieldnames = []
         for key in matches[0]:
             fieldnames.append(key)
@@ -420,7 +430,7 @@ def write_matches_data_to_csv(matches):
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         writer.writeheader()
 
-    with open('matches.csv', mode='a') as csv_file:
+    with open(file_name, mode='a') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         for match in matches:
             writer.writerow(match)
