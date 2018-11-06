@@ -52,6 +52,14 @@ def get_tournament_matches(url, tournament):
             blue_players.append(blue_players_tags[y].contents[0].strip())
             red_players.append(red_players_tags[y].contents[0].strip())
 
+        # Get bans.
+        blue_bans = columns[5].contents[0].replace("\n", "").split(", ")
+        red_bans = columns[6].contents[0].replace("\n", "").split(", ")
+
+        # Get champions.
+        blue_champions = columns[7].contents[0].replace("\n", "").split(", ")
+        red_champions = columns[8].contents[0].replace("\n", "").split(", ")
+
         match = OrderedDict()
         match['date'] = columns[0].get_text().strip()
         match['tournament'] = tournament
@@ -60,6 +68,10 @@ def get_tournament_matches(url, tournament):
         match['red_team'] = columns[3].find('a').get('title').strip()
         match['blue_players'] = blue_players
         match['red_players'] = red_players
+        match['blue_bans'] = blue_bans
+        match['red_bans'] = red_bans
+        match['blue_champions'] = blue_champions
+        match['red_champions'] = red_champions
         match['url'] = columns[12].find('a').get('href').strip() if columns[12].find('a') is not None else "Riot Match History Page could not be found."
 
         matches.append(match)
@@ -85,21 +97,22 @@ def get_matches_data(matches):
         for player in range(0, 10):
             data = OrderedDict()
 
-            ## Game Details
+            ## General
             # url
-            data['url'] = match['url']
+            data['url'] = clean_url
             # game id
             data['game_id'] = match_data['gameId']
             # date
             data['date'] = time.strftime('%d/%m/%Y', time.localtime(match_data['gameCreation']/float(1000)))
             # patch
-            data['patch'] = match_data['gameVersion']
+            patch = match_data['gameVersion'].split(".")
+            data['patch'] = patch[0] + "." + patch[1]
             # tournament
             data['tournament'] = match['tournament']
             # game in series
             data['game_in_series'] = match['game']
 
-            ## Player Details
+            ## Player
             # player id
             data['player_id'] = match_data['participants'][player]['participantId']
             # side
@@ -112,16 +125,20 @@ def get_matches_data(matches):
             positions = ["Top", "Jungle", "Mid", "ADC", "Support"]
             data['position'] = positions[player % 5]
             # champion
+            data['champion'] = match['blue_champions'][player % 5] if player < 5 else match['red_champions'][player % 5]
 
-            ## game details
+            ## Game
             # bans
+            for i in range(0, 5):
+                ban_num = 'ban{}'.format(i+1)
+                data[ban_num] = match['blue_bans'][i] if player < 5 else match['red_bans'][i]
             # game length
             data['game_length'] = match_data['gameDuration']/float(60)
             # result
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['result'] = 1 if match_data['teams'][team]['win'] == "Win" else 0
 
-            ## combat
+            ## Combat
             # kills death assists
             data['kills'] = match_data['participants'][player]['stats']['kills']
             data['deaths'] = match_data['participants'][player]['stats']['deaths']
@@ -166,7 +183,7 @@ def get_matches_data(matches):
             data['opp_kills_per_minute'] = data['opp_kills']/float(data['game_length'])
             data['combined_kills_per_minute'] = (data['kills'] + data['opp_kills'])/float(data['game_length'])
 
-            ## objectives
+            ## Objectives
             # first tower
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['first_tower'] = int(match_data['teams'][team]['firstTower'])
@@ -310,7 +327,7 @@ def get_matches_data(matches):
                         break
             data['herald_time'] = (herald_time/float(1000))/float(60)
 
-            ## damage to champions
+            ## Damage
             # storing total damage values
             team_offset = 5 if player >= 5 else 0
             team_damage = 0
@@ -334,7 +351,7 @@ def get_matches_data(matches):
             data['magic_damage_share_of_team_magic_damage'] = data['magic_damage']/float(team_magic_damage)
             data['magic_damage_share_of_damage'] = data['magic_damage']/float(data['damage'])
 
-            ## gold
+            ## Gold
             # total gold earned (minus starting gold and gold generation)
             data['gold_earned'] = match_data['participants'][player]['stats']['goldEarned']-(500+(20.4*data['game_length']*60/10))
             # gold per minute (minus starting gold and gold generation)
@@ -349,7 +366,7 @@ def get_matches_data(matches):
             data['gold_spent'] = match_data['participants'][player]['stats']['goldSpent']
             # total gold spent % difference
 
-            ## minions/monsters
+            ## Minions/Monsters
             # creep score, creep score per minute
             data['creep_score'] = match_data['participants'][player]['stats']['totalMinionsKilled'] + match_data['participants'][player]['stats']['neutralMinionsKilled']
             data['creep_score_per_minute'] = data['creep_score']/float(data['game_length'])
@@ -358,7 +375,7 @@ def get_matches_data(matches):
             data['monster_kills_team_jungle'] = match_data['participants'][player]['stats']['neutralMinionsKilledTeamJungle']
             data['monster_kills_opp_jungle'] = match_data['participants'][player]['stats']['neutralMinionsKilledEnemyJungle']
 
-            ## vision
+            ## Vision
             # wards placed, wards placed per minute
             data['wards_placed'] = match_data['participants'][player]['stats']['wardsPlaced']
             data['wards_placed_per_minute'] = data['wards_placed']/float(data['game_length'])
