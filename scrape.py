@@ -86,13 +86,14 @@ def get_matches_data(matches):
             continue
 
         clean_url = match['url'].replace("&tab=overview", "")
-        match_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + clean_url[61:]).json()
-        timeline_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + clean_url[61:-26] + "/timeline" + clean_url[82:]).json()
+        # match_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + clean_url[61:]).json()
+        # timeline_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + clean_url[61:-26] + "/timeline" + clean_url[82:]).json()
 
-        # with open('match_data.json') as match_json:
-        #    match_data = json.load(match_json)
-        # with open('timeline_data.json') as timeline_json:
-        #    timeline_data = json.load(timeline_json)
+        # For using local files instead of making api calls
+        with open('match_data.json') as match_json:
+           match_data = json.load(match_json)
+        with open('timeline_data.json') as timeline_json:
+           timeline_data = json.load(timeline_json)
 
         for player in range(0, 10):
             data = OrderedDict()
@@ -187,7 +188,7 @@ def get_matches_data(matches):
             # first tower
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['first_tower'] = int(match_data['teams'][team]['firstTower'])
-            # first tower time & lane
+            # first tower time & first tower lane
             first_tower_time = 0
             for frame in timeline_data['frames']:
                 if first_tower_time != 0:
@@ -338,7 +339,7 @@ def get_matches_data(matches):
                 team_physical_damage += match_data['participants'][x]['stats']['physicalDamageDealtToChampions']
                 team_magic_damage += match_data['participants'][x]['stats']['magicDamageDealtToChampions']
 
-            # damage, per minute, damage share of team damage
+            # damage, damage per minute, damage share of team damage
             data['damage'] = match_data['participants'][player]['stats']['totalDamageDealtToChampions']
             data['damage_per_minute'] = match_data['participants'][player]['stats']['totalDamageDealtToChampions']/float(data['game_length'])
             data['damage_share_of_team_damage'] = data['damage']/float(team_damage)
@@ -352,19 +353,20 @@ def get_matches_data(matches):
             data['magic_damage_share_of_damage'] = data['magic_damage']/float(data['damage'])
 
             ## Gold
-            # total gold earned (minus starting gold and gold generation)
+            # gold earned, gold earned per minute (minus starting gold and gold generation)
             data['gold_earned'] = match_data['participants'][player]['stats']['goldEarned']-(500+(20.4*data['game_length']*60/10))
-            # gold per minute (minus starting gold and gold generation)
             data['gold_earned_per_minute'] = data['gold_earned']/float(data['game_length'])
             # share of team total gold (minus starting gold and gold generation)
             team_offset = 5 if player >= 5 else 0
             team_gold_earned = 0
             for x in range(0+team_offset, 5+team_offset):
-                team_gold_earned += match_data['participants'][x]['stats']['goldEarned']
+                team_gold_earned += (match_data['participants'][x]['stats']['goldEarned']-(500+(20.4*data['game_length']*60/10)))
             data['gold_earned_share'] = data['gold_earned']/float(team_gold_earned)
-            # total gold spent
+            # total gold spent & opponent gold spent
             data['gold_spent'] = match_data['participants'][player]['stats']['goldSpent']
-            # total gold spent % difference
+            data['opp_gold_spent'] = match_data['participants'][player+5]['stats']['goldSpent'] if player < 5 else match_data['participants'][player-5]['stats']['goldSpent']
+            # gold spent % difference
+            data['gold_spent_difference'] = (data['gold_spent']-data['opp_gold_spent'])/float((data['gold_spent']+data['opp_gold_spent'])/float(2))
 
             ## Minions/Monsters
             # creep score, creep score per minute
@@ -398,6 +400,203 @@ def get_matches_data(matches):
             data['control_wards_placed'] = control_wards_placed
             data['control_wards_placed_per_minute'] = control_wards_placed/float(data['game_length'])
             # opponent visible wards cleared %, opponent invisible wards cleared %
+            data['visible_wards_cleared_percent'] = None
+            data['invisible_wards_cleared_percent'] = None
+
+            matches_data.append(data)
+
+        for team in range(0, 2):
+            data = OrderedDict()
+
+            player_index = (len(matches_data)-10)+(team*4)
+
+            ## General
+            # url
+            data['url'] = clean_url
+            # game id
+            data['game_id'] = match_data['gameId']
+            # date
+            data['date'] = time.strftime('%d/%m/%Y', time.localtime(match_data['gameCreation']/float(1000)))
+            # patch
+            patch = match_data['gameVersion'].split(".")
+            data['patch'] = patch[0] + "." + patch[1]
+            # tournament
+            data['tournament'] = match['tournament']
+            # game in series
+            data['game_in_series'] = match['game']
+
+            ## Team
+            # team id
+            data['player_id'] = match_data['teams'][team]['teamId']
+            # side
+            data['side'] = "blue" if team == 0 else "red"
+            # team
+            data['team'] = match['blue_team'] if team == 0 else match['red_team']
+
+            ## Game
+            # bans
+            for i in range(0, 5):
+                ban_num = 'ban{}'.format(i+1)
+                data[ban_num] = match['blue_bans'][i] if team == 0 else match['red_bans'][i]
+            # game length
+            data['game_length'] = match_data['gameDuration']/float(60)
+            # result
+            data['result'] = 1 if match_data['teams'][team]['win'] == "Win" else 0
+
+            ## Combat
+            # kills death assists
+            assists = 0
+            for i in range(0, 5):
+                assists += matches_data[player_index+i]['assists']
+            data['kills'] = matches_data[player_index]['team_kills']
+            data['deaths'] = matches_data[player_index]['team_deaths']
+            data['assists'] = assists
+            # kda
+            data['kda'] = (data['kills'] + data['assists']) if data['deaths'] == 0 else (data['kills'] + data['assists'])/float(data['deaths'])
+            # team kills & team deaths
+            data['team_kills'] = matches_data[player_index]['team_kills']
+            data['team_deaths'] = matches_data[player_index]['team_deaths']
+            # multi kills
+            double_kills = 0
+            triple_kills = 0
+            quadra_kills = 0
+            penta_kills = 0
+            for i in range(0, 5):
+                double_kills += matches_data[player_index+i]['double_kills']
+                triple_kills += matches_data[player_index+i]['triple_kills']
+                quadra_kills += matches_data[player_index+i]['quadra_kills']
+                penta_kills += matches_data[player_index+i]['penta_kills']
+            data['double_kills'] = double_kills
+            data['triple_kills'] = triple_kills
+            data['quadra_kills'] = quadra_kills
+            data['penta_kills'] = penta_kills
+            # first blood & first blood victim & first blood time
+            first_blood = 0
+            for i in range(0, 5):
+                if matches_data[player_index+i]['first_blood']:
+                    first_blood = 1
+            data['first_blood'] = first_blood
+            data['first_blood_victim'] = 1-first_blood
+            data['first_blood_time'] = matches_data[player_index]['first_blood_time']
+            # kills per minute, opponent kills per minute, combined kills per minute
+            data['kills_per_minute'] = data['kills']/float(data['game_length'])
+            data['opp_kills_per_minute'] = data['deaths']/float(data['game_length'])
+            data['combined_kills_per_minute'] = (data['kills'] + data['deaths'])/float(data['game_length'])
+
+            ## Objectives
+            # first tower & first tower time & first tower lane
+            data['first_tower'] = matches_data[player_index]['first_tower']
+            data['first_tower_time'] = matches_data[player_index]['first_tower_time']
+            data['first_tower_lane'] = matches_data[player_index]['first_tower_lane']
+            # first mid outer & first to three towers
+            data['first_mid_outer'] = matches_data[player_index]['first_mid_outer']
+            data['first_to_three_towers'] = matches_data[player_index]['first_to_three_towers']
+            # team tower kills & opponent tower kills
+            data['team_tower_kills'] = matches_data[player_index]['team_tower_kills']
+            data['opp_tower_kills'] = matches_data[player_index]['opp_tower_kills']
+            # first dragon & first dragon time
+            data['first_dragon'] = matches_data[player_index]['first_dragon']
+            data['first_dragon_time'] = matches_data[player_index]['first_dragon_time']
+            # team dragons & opponent dragons
+            data['team_dragons'] = matches_data[player_index]['team_dragons']
+            data['opp_dragons'] = matches_data[player_index]['opp_dragons']
+            # team elementals & opponent elementals
+            data['team_elementals'] = matches_data[player_index]['team_elementals']
+            data['opp_elementals'] = matches_data[player_index]['opp_elementals']
+            # team dragon types
+            data['fire_dragons'] = matches_data[player_index]['fire_dragons']
+            data['water_dragons'] = matches_data[player_index]['water_dragons']
+            data['earth_dragons'] = matches_data[player_index]['earth_dragons']
+            data['air_dragons'] = matches_data[player_index]['air_dragons']
+            # team elders & opponent elders
+            data['team_elders'] = matches_data[player_index]['team_elders']
+            data['opp_elders'] = matches_data[player_index]['opp_elders']
+            # first baron & first baron time
+            data['first_baron'] = matches_data[player_index]['first_baron']
+            data['first_baron_time'] = matches_data[player_index]['first_baron_time']
+            # team barons & opponent barons
+            data['team_barons'] = matches_data[player_index]['team_barons']
+            data['opp_barons'] = matches_data[player_index]['opp_barons']
+            # herald & herald time
+            data['herald'] = matches_data[player_index]['herald']
+            data['herald_time'] = matches_data[player_index]['herald_time']
+
+            ## Damage
+            damage = 0
+            physical_damage = 0
+            magic_damage = 0
+            for i in range(0, 5):
+                damage += matches_data[player_index+i]['damage']
+                physical_damage += matches_data[player_index+i]['physical_damage']
+                magic_damage += matches_data[player_index+i]['magic_damage']
+            # damage, damage per minute
+            data['damage'] = damage
+            data['damage_per_minute'] = damage/float(data['game_length'])
+            # physical damage, physical damage share of team physical damage, physical damage share of player damage
+            data['physical_damage'] = physical_damage
+            data['physical_damage_share_of_damage'] = physical_damage/float(data['damage'])
+            # magic damage, magic damage share of team magic damage, magic damage share of player damage
+            data['magic_damage'] = magic_damage
+            data['magic_damage_share_of_damage'] = magic_damage/float(data['damage'])
+
+            ## Gold
+            # gold earned & gold earned per minute (minus starting gold and gold generation)
+            gold_earned = 0
+            for i in range(0, 5):
+                gold_earned += matches_data[player_index+i]['gold_earned']
+            data['gold_earned'] = gold_earned
+            data['gold_earned_per_minute'] = gold_earned/float(data['game_length'])
+            # total gold spent & opponent gold spent
+            gold_spent = 0
+            opp_gold_spent = 0
+            for i in range(0, 5):
+                gold_spent += matches_data[player_index+i]['gold_spent']
+                opp_gold_spent += matches_data[player_index+i]['opp_gold_spent']
+            data['gold_spent'] = gold_spent
+            data['opp_gold_spent'] = opp_gold_spent
+            # gold spent % difference
+            data['gold_spent_difference'] = (gold_spent-opp_gold_spent)/float((gold_spent+opp_gold_spent)/float(2))
+
+            ## Minions/Monsters
+            # creep score, creep score per minute
+            creep_score = 0
+            for i in range(0, 5):
+                creep_score += matches_data[player_index+i]['creep_score']
+            data['creep_score'] = creep_score
+            data['creep_score_per_minute'] = creep_score/float(data['game_length'])
+            # monsters killed, monsters killed in team jungle, monsters killed in oppponent jungle
+            creep_score = 0
+            monster_kills = 0
+            monster_kills_team_jungle = 0
+            monster_kills_opp_jungle = 0
+            for i in range(0, 5):
+                monster_kills += matches_data[player_index+i]['monster_kills']
+                monster_kills_team_jungle += matches_data[player_index+i]['monster_kills_team_jungle']
+                monster_kills_opp_jungle += matches_data[player_index+i]['monster_kills_opp_jungle']
+            data['monster_kills'] = monster_kills
+            data['monster_kills_team_jungle'] = monster_kills_team_jungle
+            data['monster_kills_opp_jungle'] = monster_kills_opp_jungle
+
+            ## Vision
+            # wards placed, wards placed per minute
+            wards_placed = 0
+            for i in range(0, 5):
+                wards_placed += matches_data[player_index+i]['wards_placed']
+            data['wards_placed'] = wards_placed
+            data['wards_placed_per_minute'] = wards_placed/float(data['game_length'])
+            # wards cleared, wards cleared per minute
+            wards_cleared = 0
+            for i in range(0, 5):
+                wards_cleared += matches_data[player_index+i]['wards_cleared']
+            data['wards_cleared'] = wards_cleared
+            data['wards_cleared_per_minute'] = wards_cleared/float(data['game_length'])
+            # vision/control wards placed, vision/control wards placed per minute
+            control_wards_placed = 0
+            for i in range(0, 5):
+                control_wards_placed += matches_data[player_index+i]['control_wards_placed']
+            data['control_wards_placed'] = control_wards_placed
+            data['control_wards_placed_per_minute'] = control_wards_placed/float(data['game_length'])
+            # opponent visible wards cleared %, opponent invisible wards cleared %
             opp_visible_wards_placed = 0
             visible_wards_cleared = 0
             opp_invisible_wards_placed = 0
@@ -406,25 +605,25 @@ def get_matches_data(matches):
                 for event in frame['events']:
                     # opponent invisible wards cleared/placed
                     if event['type'] == "WARD_PLACED" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD":
-                        if player < 5 and ((event['creatorId']-1) >= 5):
+                        if team == 0 and ((event['creatorId']-1) >= 5):
                             opp_invisible_wards_placed += 1
-                        elif player >= 5 and ((event['creatorId']-1) < 5):
+                        elif team == 1 and ((event['creatorId']-1) < 5):
                             opp_invisible_wards_placed += 1
                     if event['type'] == "WARD_KILL" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD":
-                        if player < 5 and ((event['killerId']-1) >= 5):
+                        if team == 0 and ((event['killerId']-1) >= 5):
                             invisible_wards_cleared += 1
-                        elif player >= 5 and ((event['killerId']-1) < 5):
+                        elif team == 1 and ((event['killerId']-1) < 5):
                             invisible_wards_cleared += 1
                     # opponent visible wards cleared/placed
                     if event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
-                        if player < 5 and ((event['creatorId']-1) >= 5):
+                        if team == 0 and ((event['creatorId']-1) >= 5):
                             opp_visible_wards_placed += 1
-                        elif player >= 5 and ((event['creatorId']-1) < 5):
+                        elif team == 1 and ((event['creatorId']-1) < 5):
                             opp_visible_wards_placed += 1
                     if event['type'] == "WARD_KILL" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
-                        if player < 5 and ((event['killerId']-1) >= 5):
+                        if team == 0 and ((event['killerId']-1) >= 5):
                             visible_wards_cleared += 1
-                        elif player >= 5 and ((event['killerId']-1) < 5):
+                        elif team == 1 and ((event['killerId']-1) < 5):
                             visible_wards_cleared += 1
             data['visible_wards_cleared_percent'] = visible_wards_cleared/float(opp_visible_wards_placed)
             data['invisible_wards_cleared_percent'] = invisible_wards_cleared/float(opp_invisible_wards_placed)
