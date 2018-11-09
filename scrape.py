@@ -86,14 +86,17 @@ def get_matches_data(matches):
             continue
 
         clean_url = match['url'].replace("&tab=overview", "")
-        # match_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + clean_url[61:]).json()
-        # timeline_data = requests.get("https://acs.leagueoflegends.com/v1/stats/game" + clean_url[61:-26] + "/timeline" + clean_url[82:]).json()
+        url_parts = clean_url.replace("?", "/").split("/")
+        match_url = "https://acs.leagueoflegends.com/v1/stats/game/" + url_parts[5] + "/" + url_parts[6] + "?" + url_parts[7]
+        timeline_url = "https://acs.leagueoflegends.com/v1/stats/game/" + url_parts[5] + "/" + url_parts[6] + "/timeline?" + url_parts[7]
+        match_data = requests.get(match_url).json()
+        timeline_data = requests.get(timeline_url).json()
 
         # For using local files instead of making api calls
-        with open('match_data.json') as match_json:
-           match_data = json.load(match_json)
-        with open('timeline_data.json') as timeline_json:
-           timeline_data = json.load(timeline_json)
+        # with open('match_data.json') as match_json:
+        #    match_data = json.load(match_json)
+        # with open('timeline_data.json') as timeline_json:
+        #    timeline_data = json.load(timeline_json)
 
         for player in range(0, 10):
             data = OrderedDict()
@@ -651,7 +654,8 @@ def write_matches_data_to_csv(matches):
         for match in matches:
             writer.writerow(match)
 
-matches = get_tournament_matches("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
+#matches = get_tournament_matches("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
+matches = get_tournament_matches("http://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:Worlds%202018%20Play-In&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "Worlds 2018 Play In")
 
 matches_data = get_matches_data(matches)
 
