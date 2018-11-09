@@ -165,10 +165,10 @@ def get_matches_data(matches):
             data['triple_kills'] = match_data['participants'][player]['stats']['tripleKills']
             data['quadra_kills'] = match_data['participants'][player]['stats']['quadraKills']
             data['penta_kills'] = match_data['participants'][player]['stats']['pentaKills']
-            # first blood & assist
+            # first blood
             data['first_blood'] = 1 if match_data['participants'][player]['stats']['firstBloodKill'] else 0
-            data['first_blood_assist'] = 1 if match_data['participants'][player]['stats']['firstBloodAssist'] else 0
-            # first blood victim & first blood time
+            # first blood assist & first blood victim & first blood time
+            first_blood_assist = 0
             first_blood_victim = 0
             first_blood_time = 0
             for frame in timeline_data['frames']:
@@ -178,8 +178,13 @@ def get_matches_data(matches):
                     if event['type'] == "CHAMPION_KILL":
                         if (event['victimId']-1) == player:
                             first_blood_victim = 1
+                        else:
+                            for assistingPlayer in event['assistingParticipantIds']:
+                                if (assistingPlayer-1) == player:
+                                    first_blood_assist = 1
                         first_blood_time = event['timestamp']
                         break
+            data['first_blood_assist'] = first_blood_assist
             data['first_blood_victim'] = first_blood_victim
             data['first_blood_time'] = (first_blood_time/float(1000))/float(60)
             # kills per minute, opponent kills per minute, combined kills per minute
