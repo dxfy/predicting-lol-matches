@@ -361,14 +361,14 @@ def get_matches_data(matches):
             data['magic_damage_share_of_damage'] = data['magic_damage']/float(data['damage'])
 
             ## Gold
-            # gold earned, gold earned per minute (minus starting gold and gold generation)
-            data['gold_earned'] = match_data['participants'][player]['stats']['goldEarned']-(500+(20.4*data['game_length']*60/10))
+            # gold earned, gold earned per minute (minus starting gold)
+            data['gold_earned'] = match_data['participants'][player]['stats']['goldEarned']-500
             data['gold_earned_per_minute'] = data['gold_earned']/float(data['game_length'])
-            # share of team total gold (minus starting gold and gold generation)
+            # share of team total gold (minus starting gold)
             team_offset = 5 if player >= 5 else 0
             team_gold_earned = 0
             for x in range(0+team_offset, 5+team_offset):
-                team_gold_earned += (match_data['participants'][x]['stats']['goldEarned']-(500+(20.4*data['game_length']*60/10)))
+                team_gold_earned += match_data['participants'][x]['stats']['goldEarned']-500
             data['gold_earned_share'] = data['gold_earned']/float(team_gold_earned)
             # total gold spent & opponent gold spent
             data['gold_spent'] = match_data['participants'][player]['stats']['goldSpent']
@@ -604,34 +604,34 @@ def get_matches_data(matches):
                 control_wards_placed += matches_data[player_index+i]['control_wards_placed']
             data['control_wards_placed'] = control_wards_placed
             data['control_wards_placed_per_minute'] = control_wards_placed/float(data['game_length'])
-            # opponent visible wards cleared %, opponent invisible wards cleared %
+            # visible wards cleared %, invisible wards cleared %
             opp_visible_wards_placed = 0
             visible_wards_cleared = 0
             opp_invisible_wards_placed = 0
             invisible_wards_cleared = 0
             for frame in timeline_data['frames']:
                 for event in frame['events']:
-                    # opponent invisible wards cleared/placed
-                    if event['type'] == "WARD_PLACED" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD":
+                    # invisible wards cleared/placed
+                    if event['type'] == "WARD_PLACED" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD" and event['wardType'] != "UNDEFINED":
                         if team == 0 and ((event['creatorId']-1) >= 5):
                             opp_invisible_wards_placed += 1
                         elif team == 1 and ((event['creatorId']-1) < 5):
                             opp_invisible_wards_placed += 1
-                    if event['type'] == "WARD_KILL" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD":
-                        if team == 0 and ((event['killerId']-1) >= 5):
+                    elif event['type'] == "WARD_KILL" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD" and event['wardType'] != "UNDEFINED":
+                        if team == 0 and ((event['killerId']-1) < 5):
                             invisible_wards_cleared += 1
-                        elif team == 1 and ((event['killerId']-1) < 5):
+                        elif team == 1 and ((event['killerId']-1) >= 5):
                             invisible_wards_cleared += 1
-                    # opponent visible wards cleared/placed
-                    if event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
+                    # visible wards cleared/placed
+                    elif event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
                         if team == 0 and ((event['creatorId']-1) >= 5):
                             opp_visible_wards_placed += 1
                         elif team == 1 and ((event['creatorId']-1) < 5):
                             opp_visible_wards_placed += 1
-                    if event['type'] == "WARD_KILL" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
-                        if team == 0 and ((event['killerId']-1) >= 5):
+                    elif event['type'] == "WARD_KILL" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
+                        if team == 0 and ((event['killerId']-1) < 5):
                             visible_wards_cleared += 1
-                        elif team == 1 and ((event['killerId']-1) < 5):
+                        elif team == 1 and ((event['killerId']-1) >= 5):
                             visible_wards_cleared += 1
             data['visible_wards_cleared_percent'] = visible_wards_cleared/float(opp_visible_wards_placed)
             data['invisible_wards_cleared_percent'] = invisible_wards_cleared/float(opp_invisible_wards_placed)
@@ -640,8 +640,8 @@ def get_matches_data(matches):
 
     return matches_data
 
-def write_matches_data_to_csv(matches):
-    file_name = 'matches.csv'
+def write_matches_data_to_csv(matches, name):
+    file_name = name + ".csv"
 
     if os.path.isfile(file_name):
         os.remove(file_name)
@@ -664,4 +664,4 @@ matches = get_tournament_matches("http://lol.gamepedia.com/Special:RunQuery/Matc
 
 matches_data = get_matches_data(matches)
 
-write_matches_data_to_csv(matches_data)
+write_matches_data_to_csv(matches_data, "matches")
