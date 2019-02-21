@@ -17,10 +17,11 @@ def get_tournament_matches(url, tournament):
 
     # Removes table and column header rows.
     rows = history.find_all('tr')
-    rows[0].decompose()
-    rows[1].decompose()
-    rows[len(rows)-1].decompose()
-    # Removes unnecessary columns.
+    for x in range(0, 3):
+        rows[x].extract()
+
+    # Removes images and unnecessary columns.
+    [x.decompose() for x in history.find_all('img')]
     [x.decompose() for x in history.find_all('td', {'class': 'stats'})]
     rows = history.find_all('tr')
 
@@ -29,7 +30,7 @@ def get_tournament_matches(url, tournament):
 
     # Scrapes data and stores match data in array.
     matches = []
-    for x in range(0, len(rows)-1):
+    for x in range(0, len(rows)):
         columns = rows[x].find_all('td')
 
         # Gets game number if in a series.
@@ -44,24 +45,39 @@ def get_tournament_matches(url, tournament):
                 game = matches[len(matches)-1]['game'] + 1
 
         # Gets players.
-        blue_players_tags = columns[10].find_all('a')
-        red_players_tags = columns[11].find_all('a')
+        blue_players_tags = columns[9].find_all('a')
+        red_players_tags = columns[10].find_all('a')
         blue_players = []
         red_players = []
         for y in range(0, len(blue_players_tags)):
             blue_players.append(blue_players_tags[y].contents[0].strip())
             red_players.append(red_players_tags[y].contents[0].strip())
 
-        # Get bans.
-        blue_bans = columns[6].contents[0].replace("\n", "").split(", ")
-        red_bans = columns[7].contents[0].replace("\n", "").split(", ")
+        # # Get bans.
+        # blue_bans = columns[6].contents[0].replace("\n", "").split(", ")
+        # red_bans = columns[7].contents[0].replace("\n", "").split(", ")
+        blue_bans_tags = columns[5].span.find_all('a')
+        red_bans_tags = columns[6].span.find_all('a')
+        blue_bans = []
+        red_bans = []
+        for y in range(0, len(blue_bans_tags)):
+            blue_bans.insert(len(blue_bans), blue_bans_tags[y].get('title').strip())
+            red_bans.insert(len(red_bans), red_bans_tags[y].get('title').strip())
 
-        # Get champions.
-        blue_champions = columns[8].contents[0].replace("\n", "").split(", ")
-        red_champions = columns[9].contents[0].replace("\n", "").split(", ")
+        # # Get champions.
+        # blue_champions = columns[8].contents[0].replace("\n", "").split(", ")
+        # red_champions = columns[9].contents[0].replace("\n", "").split(", ")
+        blue_champions_tags = columns[7].span.find_all('a')
+        red_champions_tags = columns[8].span.find_all('a')
+        blue_champions = []
+        red_champions = []
+        for y in range(0, len(blue_champions_tags)):
+            blue_champions.insert(len(blue_champions), blue_champions_tags[y].get('title').strip())
+            red_champions.insert(len(red_champions), red_champions_tags[y].get('title').strip())
 
         match = OrderedDict()
         match['date'] = columns[1].get_text().strip()
+        match['patch'] = columns[2].get_text().strip()
         match['tournament'] = tournament
         match['game'] = game
         match['blue_team'] = columns[3].find('a').get('title').strip()
@@ -72,7 +88,7 @@ def get_tournament_matches(url, tournament):
         match['red_bans'] = red_bans
         match['blue_champions'] = blue_champions
         match['red_champions'] = red_champions
-        match['url'] = columns[13].find('a').get('href').strip() if columns[13].find('a') is not None else "Riot Match History Page could not be found."
+        match['url'] = columns[12].find('a').get('href').strip() if columns[12].find('a') is not None else "Riot Match History Page could not be found."
 
         matches.append(match)
 
@@ -110,8 +126,7 @@ def get_matches_data(matches):
             # date
             data['date'] = time.strftime('%d/%m/%Y', time.localtime(match_data['gameCreation']/float(1000)))
             # patch
-            patch = match_data['gameVersion'].split(".")
-            data['patch'] = patch[0] + "." + patch[1]
+            data['patch'] = match['patch']
             # tournament
             data['tournament'] = match['tournament']
             # game in series
@@ -427,8 +442,7 @@ def get_matches_data(matches):
             # date
             data['date'] = time.strftime('%d/%m/%Y', time.localtime(match_data['gameCreation']/float(1000)))
             # patch
-            patch = match_data['gameVersion'].split(".")
-            data['patch'] = patch[0] + "." + patch[1]
+            data['patch'] = match['patch']
             # tournament
             data['tournament'] = match['tournament']
             # game in series
@@ -660,16 +674,13 @@ def write_matches_data_to_csv(matches, name):
         for match in matches:
             writer.writerow(match)
 
-# matches = get_tournament_matches("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS Regionals 2018")
-# matches = get_tournament_matches("http://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:Worlds%202018%20Play-In&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "Worlds 2018 Play In")
-
 matches = []
-matches.extend(get_tournament_matches("http://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20LCS%202018%20Spring&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS 2018 Spring"))
-matches.extend(get_tournament_matches("http://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20LCS%202018%20Spring%20Playoffs&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS 2018 Spring Playoffs"))
-matches.extend(get_tournament_matches("http://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20LCS%202018%20Summer&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS 2018 Summer"))
-matches.extend(get_tournament_matches("http://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20LCS%202018%20Summer%20Playoffs&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS 2018 Summer Playoffs"))
-matches.extend(get_tournament_matches("https://lol.gamepedia.com/Special:RunQuery/MatchHistoryTournament?MHT%5Btournament%5D=Concept:NA%20Regional%20Finals%202018&MHT%5Btext%5D=Yes&pfRunQueryFormName=MatchHistoryTournament", "NALCS 2018 Regionals"))
+matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Spring_Season/Match_History", "NALCS 2018 Spring"))
+matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Spring_Playoffs/Match_History", "NALCS 2018 Spring Playoffs"))
+matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Summer_Season/Match_History", "NALCS 2018 Summer"))
+matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Summer_Playoffs/Match_History", "NALCS 2018 Summer Playoffs"))
+matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Regional_Finals/Match_History", "NALCS 2018 Regionals"))
 
 matches_data = get_matches_data(matches)
 
-write_matches_data_to_csv(matches_data, "matches")
+write_matches_data_to_csv(matches_data, "nalcs2018_complete")
