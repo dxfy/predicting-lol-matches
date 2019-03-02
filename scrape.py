@@ -389,8 +389,9 @@ def get_matches_data(matches):
             # total gold spent & opponent gold spent
             data['gold_spent'] = match_data['participants'][player]['stats']['goldSpent']
             data['opp_gold_spent'] = match_data['participants'][player+5]['stats']['goldSpent'] if player < 5 else match_data['participants'][player-5]['stats']['goldSpent']
-            # gold spent % difference
-            data['gold_spent_difference'] = (data['gold_spent']-data['opp_gold_spent'])/float((data['gold_spent']+data['opp_gold_spent'])/float(2))
+            # gold at 15 & opponent gold at 15
+            data['gold_at_15'] = timeline_data['frames'][15]['participantFrames'][str(player+1)]['totalGold']
+            data['opp_gold_at_15'] = timeline_data['frames'][15]['participantFrames'][str(player+5+1)]['totalGold'] if player < 5 else timeline_data['frames'][15]['participantFrames'][str(player-5+1)]['totalGold']
 
             ## Minions/Monsters
             # creep score, creep score per minute
@@ -577,8 +578,14 @@ def get_matches_data(matches):
                 opp_gold_spent += matches_data[player_index+i]['opp_gold_spent']
             data['gold_spent'] = gold_spent
             data['opp_gold_spent'] = opp_gold_spent
-            # gold spent % difference
-            data['gold_spent_difference'] = (gold_spent-opp_gold_spent)/float((gold_spent+opp_gold_spent)/float(2))
+            # gold at 15 & opponent gold at 15
+            gold_at_15 = 0
+            opp_gold_at_15 = 0
+            for i in range(0, 5):
+                gold_at_15 += matches_data[player_index+i]['gold_at_15']
+                opp_gold_at_15 += matches_data[player_index+i]['opp_gold_at_15']
+            data['gold_at_15'] = gold_at_15
+            data['opp_gold_at_15'] = opp_gold_at_15
 
             ## Minions/Monsters
             # creep score, creep score per minute
