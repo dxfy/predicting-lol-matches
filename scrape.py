@@ -246,10 +246,12 @@ def get_matches_data(matches):
                             blue_tower_kills += 1
                         else:
                             red_tower_kills += 1
+                    if blue_tower_kills == 3 or red_tower_kills == 3:
+                        break
             first_to_three_towers = 0
             if match_data['participants'][player]['teamId'] == 100 and blue_tower_kills == 3:
                 first_to_three_towers = 1
-            elif red_tower_kills == 3:
+            elif match_data['participants'][player]['teamId'] == 200 and red_tower_kills == 3:
                 first_to_three_towers = 1
             data['first_to_three_towers'] = first_to_three_towers
             # team tower kills & opponent tower kills
@@ -690,4 +692,4 @@ matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Sea
 
 matches_data = get_matches_data(matches)
 
-write_matches_data_to_csv(matches_data, "nalcs2018_complete")
+write_matches_data_to_csv(matches_data, "nalcs2018")
