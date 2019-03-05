@@ -6,6 +6,7 @@ import json
 import csv
 import os
 import time
+import sys
 from collections import OrderedDict
 
 # Takes a lol.gamepedia.com tournament match history page and returns match history url and team/player information.
@@ -32,6 +33,9 @@ def get_tournament_matches(url, tournament):
     matches = []
     for x in range(0, len(rows)):
         columns = rows[x].find_all('td')
+
+        if columns[12].find('a') is None:
+            continue
 
         # Gets game number if in a series.
         game = 1
@@ -88,19 +92,19 @@ def get_tournament_matches(url, tournament):
         match['red_bans'] = red_bans
         match['blue_champions'] = blue_champions
         match['red_champions'] = red_champions
-        match['url'] = columns[12].find('a').get('href').strip() if columns[12].find('a') is not None else "Riot Match History Page could not be found."
+        match['url'] = columns[12].find('a').get('href').strip()
 
         matches.append(match)
+
+    print tournament
 
     return matches
 
 # Iterates over matches returned from get_tournament_matches and uses riot api to return match data for each match.
 def get_matches_data(matches):
+    progress = 0
     matches_data = []
     for match in matches:
-        if match['url'] == "Riot Match History Page could not be found.":
-            continue
-
         clean_url = match['url'].replace("&tab=overview", "")
 
         url_parts = clean_url.replace("?", "/").split("/")
@@ -678,6 +682,12 @@ def get_matches_data(matches):
 
             matches_data.append(data)
 
+        progress += 1
+        sys.stdout.write("\r{0}/{1} matches scraped.".format(progress, len(matches)))
+        sys.stdout.flush()
+
+    print "\n"
+
     return matches_data
 
 def write_matches_data_to_csv(matches, name):
@@ -700,12 +710,12 @@ def write_matches_data_to_csv(matches, name):
             writer.writerow(match)
 
 matches = []
-matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Spring_Season/Match_History", "NALCS 2018 Spring"))
-matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Spring_Playoffs/Match_History", "NALCS 2018 Spring Playoffs"))
-matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Summer_Season/Match_History", "NALCS 2018 Summer"))
-matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Summer_Playoffs/Match_History", "NALCS 2018 Summer Playoffs"))
+# matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Spring_Season/Match_History", "NALCS 2018 Spring"))
+# matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Spring_Playoffs/Match_History", "NALCS 2018 Spring Playoffs"))
+# matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Summer_Season/Match_History", "NALCS 2018 Summer"))
+# matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Summer_Playoffs/Match_History", "NALCS 2018 Summer Playoffs"))
 matches.extend(get_tournament_matches("https://lol.gamepedia.com/NA_LCS/2018_Season/Regional_Finals/Match_History", "NALCS 2018 Regionals"))
 
 matches_data = get_matches_data(matches)
 
-write_matches_data_to_csv(matches_data, "nalcs2018")
+write_matches_data_to_csv(matches_data, "test")
