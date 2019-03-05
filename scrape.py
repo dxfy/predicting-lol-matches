@@ -212,18 +212,9 @@ def get_matches_data(matches):
             # first tower
             team = 0 if match_data['participants'][player]['teamId'] == 100 else 1
             data['first_tower'] = int(match_data['teams'][team]['firstTower'])
-            # first tower time & first tower lane
-            first_tower_time = 0
-            for frame in timeline_data['frames']:
-                if first_tower_time != 0:
-                    break
-                for event in frame['events']:
-                    if event['type'] == "BUILDING_KILL":
-                        first_tower_time = event['timestamp']
-                        first_tower_lane = event['laneType']
-                        break
-            data['first_tower_time'] = (first_tower_time/float(1000))/float(60)
-            data['first_tower_lane'] = first_tower_lane
+            # first tower gained time & first tower conceded time
+            data['first_tower_gained_time'] = None
+            data['first_tower_conceded_time'] = None
             # first mid outer
             first_mid_outer = -1
             for frame in timeline_data['frames']:
@@ -391,9 +382,15 @@ def get_matches_data(matches):
             # total gold spent & opponent gold spent
             data['gold_spent'] = match_data['participants'][player]['stats']['goldSpent']
             data['opp_gold_spent'] = match_data['participants'][player+5]['stats']['goldSpent'] if player < 5 else match_data['participants'][player-5]['stats']['goldSpent']
-            # gold at 15 & opponent gold at 15
+            # gold at 15
             data['gold_at_15'] = timeline_data['frames'][15]['participantFrames'][str(player+1)]['totalGold']
-            data['opp_gold_at_15'] = timeline_data['frames'][15]['participantFrames'][str(player+5+1)]['totalGold'] if player < 5 else timeline_data['frames'][15]['participantFrames'][str(player-5+1)]['totalGold']
+            # gold at 25
+            gold_at_25 = 0
+            if len(timeline_data['frames'])-1 < 25:
+                gold_at_25 = timeline_data['frames'][-1]['participantFrames'][str(player+1)]['totalGold']
+            else:
+                gold_at_25 = timeline_data['frames'][25]['participantFrames'][str(player+1)]['totalGold']
+            data['gold_at_25'] = gold_at_25
 
             ## Minions/Monsters
             # creep score, creep score per minute
@@ -510,10 +507,27 @@ def get_matches_data(matches):
             data['combined_kills_per_minute'] = (data['kills'] + data['deaths'])/float(data['game_length'])
 
             ## Objectives
-            # first tower & first tower time & first tower lane
+            # first tower
             data['first_tower'] = matches_data[player_index]['first_tower']
-            data['first_tower_time'] = matches_data[player_index]['first_tower_time']
-            data['first_tower_lane'] = matches_data[player_index]['first_tower_lane']
+            # first tower gained time & first tower conceded time
+            first_tower_gained_time = 0
+            first_tower_conceded_time = 0
+            for frame in timeline_data['frames']:
+                if first_tower_gained_time != 0 and first_tower_conceded_time != 0:
+                    break
+                for event in frame['events']:
+                    if team == 0:
+                        if first_tower_gained_time == 0 and event['type'] == "BUILDING_KILL" and event['teamId'] == 200 :
+                            first_tower_gained_time = event['timestamp']
+                        if first_tower_conceded_time == 0 and event['type'] == "BUILDING_KILL" and event['teamId'] == 100 :
+                            first_tower_conceded_time = event['timestamp']
+                    if team == 1:
+                        if first_tower_gained_time == 0 and event['type'] == "BUILDING_KILL" and team == 1 and event['teamId'] == 100 :
+                            first_tower_gained_time = event['timestamp']
+                        if first_tower_conceded_time == 0 and event['type'] == "BUILDING_KILL" and team == 1 and event['teamId'] == 200 :
+                            first_tower_conceded_time = event['timestamp']
+            data['first_tower_gained_time'] = (first_tower_gained_time/float(1000))/float(60)
+            data['first_tower_conceded_time'] = (first_tower_conceded_time/float(1000))/float(60)
             # first mid outer & first to three towers
             data['first_mid_outer'] = matches_data[player_index]['first_mid_outer']
             data['first_to_three_towers'] = matches_data[player_index]['first_to_three_towers']
@@ -580,14 +594,16 @@ def get_matches_data(matches):
                 opp_gold_spent += matches_data[player_index+i]['opp_gold_spent']
             data['gold_spent'] = gold_spent
             data['opp_gold_spent'] = opp_gold_spent
-            # gold at 15 & opponent gold at 15
+            # gold at 15
             gold_at_15 = 0
-            opp_gold_at_15 = 0
             for i in range(0, 5):
                 gold_at_15 += matches_data[player_index+i]['gold_at_15']
-                opp_gold_at_15 += matches_data[player_index+i]['opp_gold_at_15']
             data['gold_at_15'] = gold_at_15
-            data['opp_gold_at_15'] = opp_gold_at_15
+            # gold at 25
+            gold_at_25 = 0
+            for i in range(0, 5):
+                gold_at_25 += matches_data[player_index+i]['gold_at_25']
+            data['gold_at_25'] = gold_at_25
 
             ## Minions/Monsters
             # creep score, creep score per minute
