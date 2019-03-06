@@ -153,7 +153,8 @@ def get_matches_data(matches):
 
             ## Game
             # bans
-            for i in range(0, 5):
+            bans_length = len(match['blue_bans']) if player < 5 else len(match['red_bans'])
+            for i in range(0, bans_length):
                 ban_num = 'ban{}'.format(i+1)
                 data[ban_num] = match['blue_bans'][i] if player < 5 else match['red_bans'][i]
             # game length
@@ -462,7 +463,8 @@ def get_matches_data(matches):
 
             ## Game
             # bans
-            for i in range(0, 5):
+            bans_length = len(match['blue_bans']) if team == 0 else len(match['red_bans'])
+            for i in range(0, bans_length):
                 ban_num = 'ban{}'.format(i+1)
                 data[ban_num] = match['blue_bans'][i] if team == 0 else match['red_bans'][i]
             # game length
