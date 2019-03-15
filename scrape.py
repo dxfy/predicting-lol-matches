@@ -58,7 +58,7 @@ def get_tournament_matches(url, region, tournament):
         red_players_tags = columns[10].find_all('a')
         blue_players = []
         red_players = []
-        for y in range(0, len(blue_players_tags)):
+        for y in range(len(blue_players_tags)):
             blue_players.append(blue_players_tags[y].contents[0].strip())
             red_players.append(red_players_tags[y].contents[0].strip())
 
@@ -69,8 +69,9 @@ def get_tournament_matches(url, region, tournament):
         red_bans_tags = columns[6].span.find_all('a')
         blue_bans = []
         red_bans = []
-        for y in range(0, len(blue_bans_tags)):
+        for y in range(len(blue_bans_tags)):
             blue_bans.insert(len(blue_bans), blue_bans_tags[y].get('title').strip())
+        for y in range(len(red_bans_tags)):
             red_bans.insert(len(red_bans), red_bans_tags[y].get('title').strip())
 
         # # Get champions.
@@ -80,7 +81,7 @@ def get_tournament_matches(url, region, tournament):
         red_champions_tags = columns[8].span.find_all('a')
         blue_champions = []
         red_champions = []
-        for y in range(0, len(blue_champions_tags)):
+        for y in range(len(blue_champions_tags)):
             blue_champions.insert(len(blue_champions), blue_champions_tags[y].get('title').strip())
             red_champions.insert(len(red_champions), red_champions_tags[y].get('title').strip())
 
@@ -110,6 +111,7 @@ def get_tournament_matches(url, region, tournament):
 def get_matches_data(matches):
     progress = 0
     matches_data = []
+    team_data = []
     for match in matches:
         clean_url = match['url'].replace("&tab=overview", "")
 
@@ -141,6 +143,8 @@ def get_matches_data(matches):
             data['region'] = match['region']
             # tournament
             data['tournament'] = match['tournament']
+            # series length
+            data['series_length'] = 0
             # game in series
             data['game_in_series'] = match['game']
 
@@ -160,6 +164,12 @@ def get_matches_data(matches):
             data['champion'] = match['blue_champions'][player % 5] if player < 5 else match['red_champions'][player % 5]
 
             ## Game
+            # players
+            data['top'] = None
+            data['jgl'] = None
+            data['mid'] = None
+            data['adc'] = None
+            data['sup'] = None
             # bans
             bans_length = len(match['blue_bans']) if player < 5 else len(match['red_bans'])
             for i in range(0, bans_length):
@@ -460,6 +470,8 @@ def get_matches_data(matches):
             data['region'] = match['region']
             # tournament
             data['tournament'] = match['tournament']
+            # series length
+            data['series_length'] = 0
             # game in series
             data['game_in_series'] = match['game']
 
@@ -472,6 +484,12 @@ def get_matches_data(matches):
             data['team'] = match['blue_team'] if team == 0 else match['red_team']
 
             ## Game
+            # players
+            data['top'] = matches_data[player_index]['player']
+            data['jgl'] = matches_data[player_index+1]['player']
+            data['mid'] = matches_data[player_index+2]['player']
+            data['adc'] = matches_data[player_index+3]['player']
+            data['sup'] = matches_data[player_index+4]['player']
             # bans
             bans_length = len(match['blue_bans']) if team == 0 else len(match['red_bans'])
             for i in range(0, bans_length):
@@ -693,6 +711,7 @@ def get_matches_data(matches):
             data['invisible_wards_cleared_percent'] = invisible_wards_cleared/float(opp_invisible_wards_placed)
 
             matches_data.append(data)
+            team_data.append(data)
 
         progress += 1
         sys.stdout.write("\r{0}/{1} matches scraped.".format(progress, len(matches)))
@@ -700,7 +719,7 @@ def get_matches_data(matches):
 
     print "\n"
 
-    return matches_data
+    return team_data
 
 def write_matches_data_to_csv(matches, name):
     file_name = name + ".csv"
@@ -721,33 +740,60 @@ def write_matches_data_to_csv(matches, name):
         for match in matches:
             writer.writerow(match)
 
-
-matches = []
 tournament_information = [
-    ["gamepedia/2018/NALCS_2018_Spring.html", "NALCS", "NALCS 2018 Spring"],
-    ["gamepedia/2018/NALCS_2018_Spring_Playoffs.html", "NALCS", "NALCS 2018 Spring Playoffs"],
-    # ["gamepedia/2018/NALCS_2018_Summer.html", "NALCS", "NALCS 2018 Summer"],
-    # ["gamepedia/2018/NALCS_2018_Summer_Playoffs.html", "NALCS", "NALCS 2018 Summer Playoffs"],
-    # ["gamepedia/2018/NALCS_2018_Regionals.html", "NALCS", "NALCS 2018 Regionals"],
-    #
-    # ["gamepedia/2018/EULCS_2018_Spring.html", "EULCS", "EULCS 2018 Spring"],
-    # ["gamepedia/2018/EULCS_2018_Spring_Playoffs.html", "EULCS", "EULCS 2018 Spring Playoffs"],
-    # ["gamepedia/2018/EULCS_2018_Summer.html", "EULCS", "EULCS 2018 Summer"],
-    # ["gamepedia/2018/EULCS_2018_Summer_Playoffs.html", "EULCS", "EULCS 2018 Summer Playoffs"],
-    # ["gamepedia/2018/EULCS_2018_Regionals.html", "EULCS", "EULCS 2018 Regionals"],
-    #
-    # ["gamepedia/2018/LCK_2018_Spring_1.html", "LCK", "LCK 2018 Spring"],
-    # ["gamepedia/2018/LCK_2018_Spring_2.html", "LCK", "LCK 2018 Spring"],
-    # ["gamepedia/2018/LCK_2018_Spring_Playoffs.html", "LCK", "LCK 2018 Spring Playoffs"],
-    # ["gamepedia/2018/LCK_2018_Summer_1.html", "LCK", "LCK 2018 Summer"],
-    # ["gamepedia/2018/LCK_2018_Summer_2.html", "LCK", "LCK 2018 Summer"],
-    # ["gamepedia/2018/LCK_2018_Summer_Playoffs.html", "LCK", "LCK 2018 Summer Playoffs"],
-    # ["gamepedia/2018/LCK_2018_Regionals.html", "LCK", "LCK 2018 Regionals"],
+    [
+        ["gamepedia/2018/NALCS_2018_Spring.html", "NALCS", "NALCS 2018 Spring"],
+        ["gamepedia/2018/NALCS_2018_Spring_Playoffs.html", "NALCS", "NALCS 2018 Spring Playoffs"],
+        ["gamepedia/2018/NALCS_2018_Summer.html", "NALCS", "NALCS 2018 Summer"],
+        ["gamepedia/2018/NALCS_2018_Summer_Playoffs.html", "NALCS", "NALCS 2018 Summer Playoffs"],
+        ["gamepedia/2018/NALCS_2018_Regionals.html", "NALCS", "NALCS 2018 Regionals"],
+    ],
+    [
+        ["gamepedia/2018/EULCS_2018_Spring.html", "EULCS", "EULCS 2018 Spring"],
+        ["gamepedia/2018/EULCS_2018_Spring_Playoffs.html", "EULCS", "EULCS 2018 Spring Playoffs"],
+        ["gamepedia/2018/EULCS_2018_Summer.html", "EULCS", "EULCS 2018 Summer"],
+        ["gamepedia/2018/EULCS_2018_Summer_Playoffs.html", "EULCS", "EULCS 2018 Summer Playoffs"],
+        ["gamepedia/2018/EULCS_2018_Regionals.html", "EULCS", "EULCS 2018 Regionals"],
+    ],
+    [
+        ["gamepedia/2018/LCK_2018_Spring_1.html", "LCK", "LCK 2018 Spring"],
+        ["gamepedia/2018/LCK_2018_Spring_2.html", "LCK", "LCK 2018 Spring"],
+        ["gamepedia/2018/LCK_2018_Spring_Playoffs.html", "LCK", "LCK 2018 Spring Playoffs"],
+        ["gamepedia/2018/LCK_2018_Summer_1.html", "LCK", "LCK 2018 Summer"],
+        ["gamepedia/2018/LCK_2018_Summer_2.html", "LCK", "LCK 2018 Summer"],
+        ["gamepedia/2018/LCK_2018_Summer_Playoffs.html", "LCK", "LCK 2018 Summer Playoffs"],
+        ["gamepedia/2018/LCK_2018_Regionals.html", "LCK", "LCK 2018 Regionals"],
+    ],
+    # [
+    #     ["gamepedia/2018/LPL_2018_Spring_1.html", "LPL", "LPL 2018 Spring"],
+    #     ["gamepedia/2018/LPL_2018_Spring_2.html", "LPL", "LPL 2018 Spring"],
+    #     ["gamepedia/2018/LPL_2018_Spring_3.html", "LPL", "LPL 2018 Spring"],
+    #     ["gamepedia/2018/LPL_2018_Spring_Playoffs.html", "LPL", "LPL 2018 Spring Playoffs"],
+    #     ["gamepedia/2018/LPL_2018_Summer_1.html", "LPL", "LPL 2018 Summer"],
+    #     ["gamepedia/2018/LPL_2018_Summer_2.html", "LPL", "LPL 2018 Summer"],
+    #     ["gamepedia/2018/LPL_2018_Summer_3.html", "LPL", "LPL 2018 Summer"],
+    #     ["gamepedia/2018/LPL_2018_Summer_Playoffs.html", "LPL", "LPL 2018 Summer Playoffs"],
+    #     ["gamepedia/2018/LPL_2018_Regionals.html", "LPL", "LPL 2018 Regionals"],
+    # ],
+    [
+        ["gamepedia/2018/LMS_2018_Spring.html", "LMS", "LMS 2018 Spring"],
+        ["gamepedia/2018/LMS_2018_Spring_Playoffs.html", "LMS", "LMS 2018 Spring Playoffs"],
+        ["gamepedia/2018/LMS_2018_Summer.html", "LMS", "LMS 2018 Summer"],
+        ["gamepedia/2018/LMS_2018_Summer_Playoffs.html", "LMS", "LMS 2018 Summer Playoffs"],
+        ["gamepedia/2018/LMS_2018_Regionals.html", "LMS", "LMS 2018 Regionals"],
+    ],
 ]
 
-for tournament in tournament_information:
-    matches.extend(get_tournament_matches(tournament[0], tournament[1], tournament[2]))
+start = time.time()
+
+matches = []
+for region in tournament_information:
+    for tournament in region:
+       matches.extend(get_tournament_matches(tournament[0], tournament[1], tournament[2]))
 
 matches_data = get_matches_data(matches)
 
-write_matches_data_to_csv(matches_data, "test")
+write_matches_data_to_csv(matches_data, "complete2018")
+
+end = time.time()
+print(end - start)
