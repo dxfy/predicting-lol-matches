@@ -9,8 +9,13 @@ import time
 import sys
 from collections import OrderedDict
 
+def division_by_zero(x):
+    if x == 0:
+        return 1
+    return x
+
 # Takes a lol.gamepedia.com tournament match history page and returns match history url and team/player information.
-def get_tournament_matches(url, region, tournament):
+def get_tournament_matches(url, region, tournament, series_length):
     # Scrape url
     # response = requests.get(url)
     # soup = BeautifulSoup(response.text, 'html.parser')
@@ -86,10 +91,10 @@ def get_tournament_matches(url, region, tournament):
             red_champions.insert(len(red_champions), red_champions_tags[y].get('title').strip())
 
         match = OrderedDict()
-        match['date'] = columns[1].get_text().strip()
         match['patch'] = columns[2].get_text().strip()
         match['region'] = region
         match['tournament'] = tournament
+        match['series_length'] = series_length
         match['game'] = game
         match['blue_team'] = columns[3].find('a').get('title').strip()
         match['red_team'] = columns[4].find('a').get('title').strip()
@@ -118,8 +123,17 @@ def get_matches_data(matches):
         url_parts = clean_url.replace("?", "/").split("/")
         match_url = "https://acs.leagueoflegends.com/v1/stats/game/" + url_parts[5] + "/" + url_parts[6] + "?" + url_parts[7]
         timeline_url = "https://acs.leagueoflegends.com/v1/stats/game/" + url_parts[5] + "/" + url_parts[6] + "/timeline?" + url_parts[7]
-        match_data = requests.get(match_url).json()
-        timeline_data = requests.get(timeline_url).json()
+
+        match_data = None
+        timeline_data = None
+        while (match_data is None) or (timeline_data is None):
+            try:
+                match_data = requests.get(match_url).json()
+                timeline_data = requests.get(timeline_url).json()
+                break
+            except requests.exceptions.ConnectionError as error:
+                print "Retrying in 5 minutes..."
+                time.sleep(300)
 
         # For using local files instead of making api calls
         # with open('match_data.json') as match_json:
@@ -136,7 +150,7 @@ def get_matches_data(matches):
             # game id
             data['game_id'] = match_data['gameId']
             # date
-            data['date'] = time.strftime('%d/%m/%Y', time.localtime(match_data['gameCreation']/float(1000)))
+            data['date'] = match_data['gameCreation']
             # patch
             data['patch'] = match['patch']
             # region
@@ -144,7 +158,7 @@ def get_matches_data(matches):
             # tournament
             data['tournament'] = match['tournament']
             # series length
-            data['series_length'] = 0
+            data['series_length'] = match['series_length']
             # game in series
             data['game_in_series'] = match['game']
 
@@ -189,7 +203,7 @@ def get_matches_data(matches):
             # opponent kills
             data['opp_kills'] = match_data['participants'][player+5]['stats']['kills'] if player < 5 else match_data['participants'][player-5]['stats']['kills']
             # kda
-            data['kda'] = (data['kills'] + data['assists']) if data['deaths'] == 0 else (data['kills'] + data['assists'])/float(data['deaths'])
+            data['kda'] = (data['kills'] + data['assists'])/float(division_by_zero(data['deaths']))
             # team kills & team deaths
             team_offset = 5 if player >= 5 else 0
             team_kills = 0
@@ -447,8 +461,8 @@ def get_matches_data(matches):
             data['control_wards_placed'] = control_wards_placed
             data['control_wards_placed_per_minute'] = control_wards_placed/float(data['game_length'])
             # opponent visible wards cleared %, opponent invisible wards cleared %
-            data['visible_wards_cleared_percent'] = None
-            data['invisible_wards_cleared_percent'] = None
+            # data['visible_wards_cleared_percent'] = None
+            # data['invisible_wards_cleared_percent'] = None
 
             matches_data.append(data)
 
@@ -463,7 +477,7 @@ def get_matches_data(matches):
             # game id
             data['game_id'] = match_data['gameId']
             # date
-            data['date'] = time.strftime('%d/%m/%Y', time.localtime(match_data['gameCreation']/float(1000)))
+            data['date'] = match_data['gameCreation']
             # patch
             data['patch'] = match['patch']
             # region
@@ -471,7 +485,7 @@ def get_matches_data(matches):
             # tournament
             data['tournament'] = match['tournament']
             # series length
-            data['series_length'] = 0
+            data['series_length'] = match['series_length']
             # game in series
             data['game_in_series'] = match['game']
 
@@ -509,7 +523,7 @@ def get_matches_data(matches):
             data['deaths'] = matches_data[player_index]['team_deaths']
             data['assists'] = assists
             # kda
-            data['kda'] = (data['kills'] + data['assists']) if data['deaths'] == 0 else (data['kills'] + data['assists'])/float(data['deaths'])
+            data['kda'] = (data['kills'] + data['assists'])/float(division_by_zero(data['deaths']))
             # team kills & team deaths
             data['team_kills'] = matches_data[player_index]['team_kills']
             data['team_deaths'] = matches_data[player_index]['team_deaths']
@@ -679,36 +693,36 @@ def get_matches_data(matches):
             data['control_wards_placed'] = control_wards_placed
             data['control_wards_placed_per_minute'] = control_wards_placed/float(data['game_length'])
             # visible wards cleared %, invisible wards cleared %
-            opp_visible_wards_placed = 0
-            visible_wards_cleared = 0
-            opp_invisible_wards_placed = 0
-            invisible_wards_cleared = 0
-            for frame in timeline_data['frames']:
-                for event in frame['events']:
-                    # invisible wards cleared/placed
-                    if event['type'] == "WARD_PLACED" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD" and event['wardType'] != "UNDEFINED":
-                        if team == 0 and ((event['creatorId']-1) >= 5):
-                            opp_invisible_wards_placed += 1
-                        elif team == 1 and ((event['creatorId']-1) < 5):
-                            opp_invisible_wards_placed += 1
-                    elif event['type'] == "WARD_KILL" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD" and event['wardType'] != "UNDEFINED":
-                        if team == 0 and ((event['killerId']-1) < 5):
-                            invisible_wards_cleared += 1
-                        elif team == 1 and ((event['killerId']-1) >= 5):
-                            invisible_wards_cleared += 1
-                    # visible wards cleared/placed
-                    elif event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
-                        if team == 0 and ((event['creatorId']-1) >= 5):
-                            opp_visible_wards_placed += 1
-                        elif team == 1 and ((event['creatorId']-1) < 5):
-                            opp_visible_wards_placed += 1
-                    elif event['type'] == "WARD_KILL" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
-                        if team == 0 and ((event['killerId']-1) < 5):
-                            visible_wards_cleared += 1
-                        elif team == 1 and ((event['killerId']-1) >= 5):
-                            visible_wards_cleared += 1
-            data['visible_wards_cleared_percent'] = visible_wards_cleared/float(opp_visible_wards_placed)
-            data['invisible_wards_cleared_percent'] = invisible_wards_cleared/float(opp_invisible_wards_placed)
+            # opp_visible_wards_placed = 0
+            # visible_wards_cleared = 0
+            # opp_invisible_wards_placed = 0
+            # invisible_wards_cleared = 0
+            # for frame in timeline_data['frames']:
+            #     for event in frame['events']:
+            #         # invisible wards cleared/placed
+            #         if event['type'] == "WARD_PLACED" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD" and event['wardType'] != "UNDEFINED":
+            #             if team == 0 and ((event['creatorId']-1) >= 5):
+            #                 opp_invisible_wards_placed += 1
+            #             elif team == 1 and ((event['creatorId']-1) < 5):
+            #                 opp_invisible_wards_placed += 1
+            #         elif event['type'] == "WARD_KILL" and event['wardType'] != "CONTROL_WARD" and event['wardType'] != "BLUE_TRINKET" and event['wardType'] != "VISION_WARD" and event['wardType'] != "UNDEFINED":
+            #             if team == 0 and ((event['killerId']-1) < 5):
+            #                 invisible_wards_cleared += 1
+            #             elif team == 1 and ((event['killerId']-1) >= 5):
+            #                 invisible_wards_cleared += 1
+            #         # visible wards cleared/placed
+            #         elif event['type'] == "WARD_PLACED" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
+            #             if team == 0 and ((event['creatorId']-1) >= 5):
+            #                 opp_visible_wards_placed += 1
+            #             elif team == 1 and ((event['creatorId']-1) < 5):
+            #                 opp_visible_wards_placed += 1
+            #         elif event['type'] == "WARD_KILL" and (event['wardType'] == "CONTROL_WARD" or event['wardType'] == "BLUE_TRINKET" or event['wardType'] == "VISION_WARD"):
+            #             if team == 0 and ((event['killerId']-1) < 5):
+            #                 visible_wards_cleared += 1
+            #             elif team == 1 and ((event['killerId']-1) >= 5):
+            #                 visible_wards_cleared += 1
+            # data['visible_wards_cleared_percent'] = visible_wards_cleared/float(opp_visible_wards_placed)
+            # data['invisible_wards_cleared_percent'] = invisible_wards_cleared/float(opp_invisible_wards_placed)
 
             matches_data.append(data)
             team_data.append(data)
@@ -728,72 +742,160 @@ def write_matches_data_to_csv(matches, name):
         os.remove(file_name)
 
     with open(file_name, mode='w') as csv_file:
-        fieldnames = []
-        for key in matches[0]:
-            fieldnames.append(key)
-
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer = csv.DictWriter(csv_file, fieldnames=matches[0].keys())
         writer.writeheader()
-
-    with open(file_name, mode='a') as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         for match in matches:
             writer.writerow(match)
 
-tournament_information = [
+tournament_information_2018 = [
     [
-        ["gamepedia/2018/NALCS_2018_Spring.html", "NALCS", "NALCS 2018 Spring"],
-        ["gamepedia/2018/NALCS_2018_Spring_Playoffs.html", "NALCS", "NALCS 2018 Spring Playoffs"],
-        ["gamepedia/2018/NALCS_2018_Summer.html", "NALCS", "NALCS 2018 Summer"],
-        ["gamepedia/2018/NALCS_2018_Summer_Playoffs.html", "NALCS", "NALCS 2018 Summer Playoffs"],
-        ["gamepedia/2018/NALCS_2018_Regionals.html", "NALCS", "NALCS 2018 Regionals"],
+        ["gamepedia/2018/NALCS_2018_Spring.html", "NALCS", "NALCS 2018 Spring", 1],
+        ["gamepedia/2018/NALCS_2018_Spring_Playoffs.html", "NALCS", "NALCS 2018 Spring Playoffs", 5],
+        ["gamepedia/2018/NALCS_2018_Summer.html", "NALCS", "NALCS 2018 Summer", 1],
+        ["gamepedia/2018/NALCS_2018_Summer_Playoffs.html", "NALCS", "NALCS 2018 Summer Playoffs", 5],
+        ["gamepedia/2018/NALCS_2018_Regionals.html", "NALCS", "NALCS 2018 Regionals", 5],
     ],
     [
-        ["gamepedia/2018/EULCS_2018_Spring.html", "EULCS", "EULCS 2018 Spring"],
-        ["gamepedia/2018/EULCS_2018_Spring_Playoffs.html", "EULCS", "EULCS 2018 Spring Playoffs"],
-        ["gamepedia/2018/EULCS_2018_Summer.html", "EULCS", "EULCS 2018 Summer"],
-        ["gamepedia/2018/EULCS_2018_Summer_Playoffs.html", "EULCS", "EULCS 2018 Summer Playoffs"],
-        ["gamepedia/2018/EULCS_2018_Regionals.html", "EULCS", "EULCS 2018 Regionals"],
+        ["gamepedia/2018/EULCS_2018_Spring.html", "EULCS", "EULCS 2018 Spring", 1],
+        ["gamepedia/2018/EULCS_2018_Spring_Playoffs.html", "EULCS", "EULCS 2018 Spring Playoffs", 5],
+        ["gamepedia/2018/EULCS_2018_Summer.html", "EULCS", "EULCS 2018 Summer", 1],
+        ["gamepedia/2018/EULCS_2018_Summer_Playoffs.html", "EULCS", "EULCS 2018 Summer Playoffs", 5],
+        ["gamepedia/2018/EULCS_2018_Regionals.html", "EULCS", "EULCS 2018 Regionals", 5],
     ],
     [
-        ["gamepedia/2018/LCK_2018_Spring_1.html", "LCK", "LCK 2018 Spring"],
-        ["gamepedia/2018/LCK_2018_Spring_2.html", "LCK", "LCK 2018 Spring"],
-        ["gamepedia/2018/LCK_2018_Spring_Playoffs.html", "LCK", "LCK 2018 Spring Playoffs"],
-        ["gamepedia/2018/LCK_2018_Summer_1.html", "LCK", "LCK 2018 Summer"],
-        ["gamepedia/2018/LCK_2018_Summer_2.html", "LCK", "LCK 2018 Summer"],
-        ["gamepedia/2018/LCK_2018_Summer_Playoffs.html", "LCK", "LCK 2018 Summer Playoffs"],
-        ["gamepedia/2018/LCK_2018_Regionals.html", "LCK", "LCK 2018 Regionals"],
+        ["gamepedia/2018/LCK_2018_Spring_1.html", "LCK", "LCK 2018 Spring", 3],
+        ["gamepedia/2018/LCK_2018_Spring_2.html", "LCK", "LCK 2018 Spring", 3],
+        ["gamepedia/2018/LCK_2018_Spring_Playoffs.html", "LCK", "LCK 2018 Spring Playoffs", 5],
+        ["gamepedia/2018/LCK_2018_Summer_1.html", "LCK", "LCK 2018 Summer", 3],
+        ["gamepedia/2018/LCK_2018_Summer_2.html", "LCK", "LCK 2018 Summer", 3],
+        ["gamepedia/2018/LCK_2018_Summer_Playoffs.html", "LCK", "LCK 2018 Summer Playoffs", 5],
+        ["gamepedia/2018/LCK_2018_Regionals.html", "LCK", "LCK 2018 Regionals", 5],
     ],
-    # [
-    #     ["gamepedia/2018/LPL_2018_Spring_1.html", "LPL", "LPL 2018 Spring"],
-    #     ["gamepedia/2018/LPL_2018_Spring_2.html", "LPL", "LPL 2018 Spring"],
-    #     ["gamepedia/2018/LPL_2018_Spring_3.html", "LPL", "LPL 2018 Spring"],
-    #     ["gamepedia/2018/LPL_2018_Spring_Playoffs.html", "LPL", "LPL 2018 Spring Playoffs"],
-    #     ["gamepedia/2018/LPL_2018_Summer_1.html", "LPL", "LPL 2018 Summer"],
-    #     ["gamepedia/2018/LPL_2018_Summer_2.html", "LPL", "LPL 2018 Summer"],
-    #     ["gamepedia/2018/LPL_2018_Summer_3.html", "LPL", "LPL 2018 Summer"],
-    #     ["gamepedia/2018/LPL_2018_Summer_Playoffs.html", "LPL", "LPL 2018 Summer Playoffs"],
-    #     ["gamepedia/2018/LPL_2018_Regionals.html", "LPL", "LPL 2018 Regionals"],
-    # ],
     [
-        ["gamepedia/2018/LMS_2018_Spring.html", "LMS", "LMS 2018 Spring"],
-        ["gamepedia/2018/LMS_2018_Spring_Playoffs.html", "LMS", "LMS 2018 Spring Playoffs"],
-        ["gamepedia/2018/LMS_2018_Summer.html", "LMS", "LMS 2018 Summer"],
-        ["gamepedia/2018/LMS_2018_Summer_Playoffs.html", "LMS", "LMS 2018 Summer Playoffs"],
-        ["gamepedia/2018/LMS_2018_Regionals.html", "LMS", "LMS 2018 Regionals"],
+        ["gamepedia/2018/LMS_2018_Spring.html", "LMS", "LMS 2018 Spring", 3],
+        ["gamepedia/2018/LMS_2018_Spring_Playoffs.html", "LMS", "LMS 2018 Spring Playoffs", 5],
+        ["gamepedia/2018/LMS_2018_Summer.html", "LMS", "LMS 2018 Summer", 3],
+        ["gamepedia/2018/LMS_2018_Summer_Playoffs.html", "LMS", "LMS 2018 Summer Playoffs", 5],
+        ["gamepedia/2018/LMS_2018_Regionals.html", "LMS", "LMS 2018 Regionals", 5],
+    ],
+]
+
+tournament_information_2017 = [
+    [
+        ["gamepedia/2017/NALCS_2017_Spring_1.html", "NALCS", "NALCS 2017 Spring", 1],
+        ["gamepedia/2017/NALCS_2017_Spring_2.html", "NALCS", "NALCS 2017 Spring", 1],
+        ["gamepedia/2017/NALCS_2017_Spring_3.html", "NALCS", "NALCS 2017 Spring", 1],
+        ["gamepedia/2017/NALCS_2017_Spring_Playoffs.html", "NALCS", "NALCS 2017 Spring Playoffs", 5],
+        ["gamepedia/2017/NALCS_2017_Summer_1.html", "NALCS", "NALCS 2017 Summer", 1],
+        ["gamepedia/2017/NALCS_2017_Summer_2.html", "NALCS", "NALCS 2017 Summer", 1],
+        ["gamepedia/2017/NALCS_2017_Summer_3.html", "NALCS", "NALCS 2017 Summer", 1],
+        ["gamepedia/2017/NALCS_2017_Summer_Playoffs.html", "NALCS", "NALCS 2017 Summer Playoffs", 5],
+        ["gamepedia/2017/NALCS_2017_Regionals.html", "NALCS", "NALCS 2017 Regionals", 5],
+    ],
+    [
+        ["gamepedia/2017/EULCS_2017_Spring_1.html", "EULCS", "EULCS 2017 Spring", 3],
+        ["gamepedia/2017/EULCS_2017_Spring_2.html", "EULCS", "EULCS 2017 Spring", 3],
+        ["gamepedia/2017/EULCS_2017_Spring_Playoffs.html", "EULCS", "EULCS 2017 Spring Playoffs", 5],
+        ["gamepedia/2017/EULCS_2017_Summer_1.html", "EULCS", "EULCS 2017 Summer", 3],
+        ["gamepedia/2017/EULCS_2017_Summer_2.html", "EULCS", "EULCS 2017 Summer", 3],
+        ["gamepedia/2017/EULCS_2017_Summer_Playoffs.html", "EULCS", "EULCS 2017 Summer Playoffs", 5],
+        ["gamepedia/2017/EULCS_2017_Regionals.html", "EULCS", "EULCS 2017 Regionals", 5],
+    ],
+    [
+        ["gamepedia/2017/LCK_2017_Spring_1.html", "LCK", "LCK 2017 Spring", 3],
+        ["gamepedia/2017/LCK_2017_Spring_2.html", "LCK", "LCK 2017 Spring", 3],
+        ["gamepedia/2017/LCK_2017_Spring_Playoffs.html", "LCK", "LCK 2017 Spring Playoffs", 5],
+        ["gamepedia/2017/LCK_2017_Summer_1.html", "LCK", "LCK 2017 Summer", 3],
+        ["gamepedia/2017/LCK_2017_Summer_2.html", "LCK", "LCK 2017 Summer", 3],
+        ["gamepedia/2017/LCK_2017_Summer_Playoffs.html", "LCK", "LCK 2017 Summer Playoffs", 5],
+        ["gamepedia/2017/LCK_2017_Regionals.html", "LCK", "LCK 2017 Regionals", 5],
+    ],
+    [
+        ["gamepedia/2017/LMS_2017_Spring.html", "LMS", "LMS 2017 Spring", 3],
+        ["gamepedia/2017/LMS_2017_Spring_Playoffs.html", "LMS", "LMS 2017 Spring Playoffs", 5],
+        ["gamepedia/2017/LMS_2017_Summer.html", "LMS", "LMS 2017 Summer", 3],
+        ["gamepedia/2017/LMS_2017_Summer_Playoffs.html", "LMS", "LMS 2017 Summer Playoffs", 5],
+        ["gamepedia/2017/LMS_2017_Regionals.html", "LMS", "LMS 2017 Regionals", 5],
+    ],
+]
+
+tournament_information_2016 = [
+    [
+        ["gamepedia/2016/NALCS_2016_Spring.html", "NALCS", "NALCS 2016 Spring", 1],
+        ["gamepedia/2016/NALCS_2016_Spring_Playoffs.html", "NALCS", "NALCS 2016 Spring Playoffs", 5],
+        ["gamepedia/2016/NALCS_2016_Summer_1.html", "NALCS", "NALCS 2016 Summer", 1],
+        ["gamepedia/2016/NALCS_2016_Summer_2.html", "NALCS", "NALCS 2016 Summer", 1],
+        ["gamepedia/2016/NALCS_2016_Summer_3.html", "NALCS", "NALCS 2016 Summer", 1],
+        ["gamepedia/2016/NALCS_2016_Summer_Playoffs.html", "NALCS", "NALCS 2016 Summer Playoffs", 5],
+        ["gamepedia/2016/NALCS_2016_Regionals.html", "NALCS", "NALCS 2016 Regionals", 5],
+    ],
+    [
+        ["gamepedia/2016/EULCS_2016_Spring.html", "EULCS", "EULCS 2016 Spring", 1],
+        ["gamepedia/2016/EULCS_2016_Spring_Playoffs.html", "EULCS", "EULCS 2016 Spring Playoffs", 5],
+        ["gamepedia/2016/EULCS_2016_Summer_1.html", "EULCS", "EULCS 2016 Summer", 1],
+        ["gamepedia/2016/EULCS_2016_Summer_2.html", "EULCS", "EULCS 2016 Summer", 1],
+        ["gamepedia/2016/EULCS_2016_Summer_3.html", "EULCS", "EULCS 2016 Summer", 1],
+        ["gamepedia/2016/EULCS_2016_Summer_Playoffs.html", "EULCS", "EULCS 2016 Summer Playoffs", 5],
+        ["gamepedia/2016/EULCS_2016_Regionals.html", "EULCS", "EULCS 2016 Regionals", 5],
+    ],
+    [
+        ["gamepedia/2016/LCK_2016_Spring_1.html", "LCK", "LCK 2016 Spring", 3],
+        ["gamepedia/2016/LCK_2016_Spring_2.html", "LCK", "LCK 2016 Spring", 3],
+        ["gamepedia/2016/LCK_2016_Spring_Playoffs.html", "LCK", "LCK 2016 Spring Playoffs", 5],
+        ["gamepedia/2016/LCK_2016_Summer_1.html", "LCK", "LCK 2016 Summer", 3],
+        ["gamepedia/2016/LCK_2016_Summer_2.html", "LCK", "LCK 2016 Summer", 3],
+        ["gamepedia/2016/LCK_2016_Summer_3.html", "LCK", "LCK 2016 Summer", 3],
+        ["gamepedia/2016/LCK_2016_Summer_Playoffs.html", "LCK", "LCK 2016 Summer Playoffs", 5],
+        ["gamepedia/2016/LCK_2016_Regionals.html", "LCK", "LCK 2016 Regionals", 5],
+    ],
+    [
+        ["gamepedia/2016/LMS_2016_Spring.html", "LMS", "LMS 2016 Spring", 2],
+        ["gamepedia/2016/LMS_2016_Spring_Playoffs.html", "LMS", "LMS 2016 Spring Playoffs", 5],
+        ["gamepedia/2016/LMS_2016_Summer.html", "LMS", "LMS 2016 Summer", 2],
+        ["gamepedia/2016/LMS_2016_Summer_Playoffs.html", "LMS", "LMS 2016 Summer Playoffs", 5],
+        ["gamepedia/2016/LMS_2016_Regionals.html", "LMS", "LMS 2016 Regionals", 5],
     ],
 ]
 
 start = time.time()
 
-matches = []
-for region in tournament_information:
+# This code scrapes and writes each year of matches to its own file
+# Running this code will overwrite the csvs we already scraped/prepared
+#
+# matches_2018 = []
+# for region in tournament_information_2018:
+#     for tournament in region:
+#        matches_2018.extend(get_tournament_matches(tournament[0], tournament[1], tournament[2], tournament[3]))
+#
+# matches_data = get_matches_data(matches_2018)
+# write_matches_data_to_csv(matches_data, "matches/2018")
+#
+#
+# matches_2017 = []
+# for region in tournament_information_2017:
+#     for tournament in region:
+#        matches_2017.extend(get_tournament_matches(tournament[0], tournament[1], tournament[2], tournament[3]))
+#
+# matches_data = get_matches_data(matches_2017)
+# write_matches_data_to_csv(matches_data, "matches/2017")
+#
+#
+# matches_2016 = []
+# for region in tournament_information_2016:
+#     for tournament in region:
+#        matches_2016.extend(get_tournament_matches(tournament[0], tournament[1], tournament[2], tournament[3]))
+#
+# matches_data = get_matches_data(matches_2016)
+# write_matches_data_to_csv(matches_data, "matches/2016")
+
+# Use this code to test the scraper on 2018 without overwriting the data we already prepared in the matches folder
+matches_2018 = []
+for region in tournament_information_2018:
     for tournament in region:
-       matches.extend(get_tournament_matches(tournament[0], tournament[1], tournament[2]))
+       matches_2018.extend(get_tournament_matches(tournament[0], tournament[1], tournament[2], tournament[3]))
 
-matches_data = get_matches_data(matches)
-
-write_matches_data_to_csv(matches_data, "complete2018")
+matches_data = get_matches_data(matches_2018)
+write_matches_data_to_csv(matches_data, "matches/test_2018")
 
 end = time.time()
 print(end - start)

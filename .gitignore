@@ -26,3 +26,8 @@ env.bak/
 venv.bak/
 
 .DS_Store
+
+/gamepedia
+/matches
+/matches_with_features
+/odds

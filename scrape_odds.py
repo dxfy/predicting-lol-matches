@@ -1,4 +1,3 @@
-import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -8,11 +7,17 @@ import csv
 import os
 from collections import OrderedDict
 
+chromedriver_path = ''
+user_data_directory = '/Users/Hamza/Library/Application Support/Google/Chrome/Default'
+
 def get_tournament_odds(url):
     # Scrape url
     options = webdriver.ChromeOptions()
-    options.add_argument("--user-data-dir=/Users/Hamza/library/application support/google/chrome/default")
-    driver = webdriver.Chrome(chrome_options=options)
+    options.add_argument('--user-data-dir=' + user_data_directory)
+    if chromedriver_path == '':
+        driver = webdriver.Chrome(chrome_options=options)
+    else:
+        driver = webdriver.Chrome('chromedriver_path', chrome_options=options)
     driver.get(url)
     soup = BeautifulSoup(driver.page_source, 'html.parser')
 
@@ -30,35 +35,18 @@ def get_tournament_odds(url):
     for page in pages:
         print page
         driver.get(page)
-        soup = soup = BeautifulSoup(driver.page_source, 'html.parser')
-        #soup = BeautifulSoup(open('oddsport_error.html'), 'html.parser')
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
 
         table = soup.find('table', {'id': 'tournamentTable'})
 
         a_tags = table.select('td.table-participant > a')
         match_links = [("https://www.oddsportal.com" + a.get('href').strip()) for a in a_tags]
-        # match_teams = []
-        # for a in a_tags:
-        #     print a.contents
-        #
-        #     if (a.contents[0].name == 'span') or (a.contents[1].name == 'span'):
-        #         if a.contents[0].name == 'span':
-        #             team1 = a.contents[0].text
-        #             team2 = a.contents[1][3:]
-        #         elif a.contents[1].name == 'span':
-        #             team1 = a.contents[0][3:]
-        #             team2 = a.contents[1].text
-        #     else:
-        #         team1 = a.contents[0][]
-        #
-        #     print [team1, team2]
-        #
-        #     match_teams.append([team1, team2])
 
         for match in match_links:
             driver.get(match)
             soup = BeautifulSoup(driver.page_source, 'html.parser')
 
+            # handles oddsportal system error page
             correct_page = 0
             while(not correct_page):
                 if soup.select_one('div#col-content > h1').text == "System error":
@@ -76,10 +64,6 @@ def get_tournament_odds(url):
             match_odds['date'] = date
             match_odds['team1'] = teams[0].strip()
             match_odds['team2'] = teams[1].strip()
-
-            #print match_odds
-
-            #break
 
             table_rows = soup.select('table.table-main > tbody > tr.lo')
             for i, row in enumerate(table_rows):
@@ -107,10 +91,6 @@ def get_tournament_odds(url):
 
             time.sleep(1)
 
-            #break
-
-        #break
-
         time.sleep(5)
 
     driver.close()
@@ -129,19 +109,52 @@ def write_odds_data_to_csv(matches, name):
         for match in matches:
             writer.writerow(match)
 
-tournaments = [
+tournaments_2018 = [
         "https://www.oddsportal.com/esports/world/league-of-legends-championship-series-2018/results/",
         "https://www.oddsportal.com/esports/south-korea/league-of-legends-champions-korea-2018/results/",
         "https://www.oddsportal.com/esports/taiwan/league-of-legends-lol-master-series-2018/results/",
 ]
 
+tournaments_2017 = [
+        "https://www.oddsportal.com/esports/world/league-of-legends-championship-series-2017/results/",
+        "https://www.oddsportal.com/esports/south-korea/league-of-legends-champions-korea-2017/results/",
+        "https://www.oddsportal.com/esports/taiwan/league-of-legends-lol-master-series-2017/results/",
+]
+
+tournaments_2016 = [
+        "https://www.oddsportal.com/esports/world/league-of-legends-championship-series-2016/results/",
+        "https://www.oddsportal.com/esports/south-korea/league-of-legends-champions-korea-2016/results/",
+]
+
 start = time.time()
 
+# This code scrapes and writes each year of odds to its own file
+# Running this code will overwrite the csvs we already scraped/prepared
+#
+# matches_odds = []
+# for tournament in tournaments_2018:
+#    matches_odds.extend(get_tournament_odds(tournament))
+#
+# write_odds_data_to_csv(matches_odds, "odds/2018_odds")
+#
+# matches_odds = []
+# for tournament in tournaments_2017:
+#    matches_odds.extend(get_tournament_odds(tournament))
+#
+# write_odds_data_to_csv(matches_odds, "odds/2017_odds")
+#
+# matches_odds = []
+# for tournament in tournaments_2016:
+#    matches_odds.extend(get_tournament_odds(tournament))
+#
+# write_odds_data_to_csv(matches_odds, "odds/2016_odds")
+
+# Use this code to test the scraper on 2018 without overwriting the data we already prepared in the matches folder
 matches_odds = []
-for tournament in tournaments:
+for tournament in tournaments_2018:
    matches_odds.extend(get_tournament_odds(tournament))
 
-write_odds_data_to_csv(matches_odds, "complete2018_odds")
+write_odds_data_to_csv(matches_odds, "odds/test_2018_odds")
 
 end = time.time()
 print(end - start)
